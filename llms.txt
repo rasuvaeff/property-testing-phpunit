@@ -1,0 +1,110 @@
+# rasuvaeff/property-testing-phpunit
+
+PHPUnit adapter for the property-testing engine: a `PropertyTesting` trait
+with a fluent `forAll()->check()` API over `rasuvaeff/property-testing-core`.
+
+## Install
+
+```bash
+composer require --dev rasuvaeff/property-testing-phpunit
+```
+
+Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0`,
+`rasuvaeff/property-testing-core` `^0.1`.
+
+## Rules
+
+- The `check()` closure's **parameter names select the generators** from the
+  `forAll()` map — a missing generator for a parameter throws
+  `InvalidArgumentException`.
+- A passing property registers **one assertion** on the running `TestCase`
+  (never risky); every failing outcome throws **one `AssertionFailedError`**
+  whose message is the engine's (seed, original/shrunk args, shrink stats) and
+  whose `previous` is the engine exception (`PropertyViolationException`,
+  `GaveUpException`, `CoverageViolationException`,
+  `DeadlineExceededException`, `TimeBudgetExceededException`,
+  `ExampleViolationException`, `RegressionViolationException`,
+  `GenerationExhausted`).
+- `Assume::that(false)` **discards the run** (retried by the engine, budget
+  `maxDiscards`, default `runs * 10`) — it never skips the PHPUnit test.
+- An explicit `seed()` **disables regression-corpus replay** for that
+  property; the env `PROPERTY_SEED` does not.
+- `forAll()` must be called **directly from the test method** (it reads the
+  caller's name for the property id and corpus key).
+- Environment contract and corpus format are identical to the Testo adapter
+  and to frozen `rasuvaeff/property-testing` 2.8 — corpora interoperate.
+- Generators, `Shrinkable`, `Assume`, `Classify`, `Gen::draw()`, state-machine
+  testing: see `rasuvaeff/property-testing-core` llms.txt — all of it works
+  inside `check()` closures unchanged.
+
+## API
+
+### Trait `Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting`
+
+```php
+final protected function forAll(array $generators): PropertyCheck;
+// $generators: array<string, ArbitraryInterface>, keyed by closure parameter name
+```
+
+### `Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck` (fluent, all setters return $this)
+
+```php
+public function runs(int $runs): self;               // successful checks, default 100
+public function seed(int $seed): self;               // pin the random phase; disables corpus replay
+public function maxShrinks(int $maxShrinks): self;   // cap accepted shrink steps; 0 = no shrinking
+public function maxDiscards(int $maxDiscards): self; // discard budget; default runs * 10
+public function timeoutMs(int $timeoutMs): self;     // per-run wall-clock deadline
+public function budgetMs(int $budgetMs): self;       // whole-phase wall-clock budget
+public function examples(array $examples): self;     // list<list<mixed>> positional tuples, run first, never shrunk
+public function listeners(PropertyListener ...$listeners): self; // engine event observers
+public function output($stdout, $stderr): self;      // redirect reports/trace streams (for tests)
+public function check(\Closure $property): void;     // run the property
+```
+
+### Example
+
+```php
+use PHPUnit\Framework\TestCase;
+use Rasuvaeff\PropertyTesting\Gen;
+use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
+
+final class SortPropertyTest extends TestCase
+{
+    use PropertyTesting;
+
+    public function testSortIsIdempotent(): void
+    {
+        $this->forAll(['values' => Gen::arrayOf(Gen::int())])
+            ->runs(300)
+            ->check(static function (array $values): void {
+                sort($values);
+                $once = $values;
+                sort($values);
+
+                self::assertSame($once, $values);
+            });
+    }
+}
+```
+
+### Environment variables
+
+| Variable | Accepts | Effect |
+|---|---|---|
+| `PROPERTY_RUNS` | `/^\d+\z/`, >= 1 | Overrides every property's run count; invalid value throws `InvalidArgumentException` |
+| `PROPERTY_SEED` | `/^-?\d+\z/` | Seeds properties without an explicit `seed()`; `seed()` wins; invalid value throws |
+| `PROPERTY_VERBOSE` | anything but `''`/`'0'` | Trace: each run's arguments/draws, each accepted shrink step |
+| `PROPERTY_DB` | directory path | Regression corpus: record on falsification, replay first on the next run, prune on green; format = property-testing 2.8 |
+
+### Classification output
+
+`Classify::label()`/`when()`/`cover()` in the body work as in every adapter; a
+passing classified property prints
+`Property "<name>" distribution: label N% (n/checks), …` and a >90% discard
+rate prints a narrowing warning to stderr.
+
+### Internal
+
+`Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener` — the `PROPERTY_VERBOSE`
+trace as an exception-hardened `PropertyListener`; attached automatically,
+not part of the public API.

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    findUnusedCode="false"
+    resolveFromConfigFile="true"
+>
+    <projectFiles>
+        <directory name="src"/>
+        <ignoreFiles>
+            <directory name="vendor"/>
+        </ignoreFiles>
+    </projectFiles>
+    <issueHandlers>
+        <!--
+            PHPUnit marks nearly its whole surface @internal by policy, including
+            AssertionFailedError — the documented type a third-party integration
+            throws to report a FAILURE (an arbitrary exception would surface as an
+            ERROR instead) — and TestCase::addToAssertionCount(), the only way a
+            passing property registers as an assertion rather than a risky test.
+            These two references are this adapter's entire boundary with PHPUnit
+            internals; anything else stays at level 1.
+        -->
+        <InternalClass>
+            <errorLevel type="suppress">
+                <referencedClass name="PHPUnit\Framework\AssertionFailedError"/>
+            </errorLevel>
+        </InternalClass>
+        <InternalMethod>
+            <errorLevel type="suppress">
+                <referencedMethod name="PHPUnit\Framework\TestCase::addToAssertionCount"/>
+                <referencedMethod name="PHPUnit\Framework\Exception::__construct"/>
+                <referencedMethod name="PHPUnit\Framework\AssertionFailedError::__construct"/>
+            </errorLevel>
+        </InternalMethod>
+    </issueHandlers>
+</psalm>
