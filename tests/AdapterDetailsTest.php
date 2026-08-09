@@ -192,7 +192,7 @@ final class AdapterDetailsTest extends TestCase
         rewind($stdout);
 
         self::assertSame(
-            'Property "testTheDistributionIsSortedByCountNotInsertionOrder" distribution: often 67% (2/3), once 33% (1/3)' . PHP_EOL,
+            'Property "testTheDistributionIsSortedByCountNotInsertionOrder" distribution: often 67% (2/3), once 33% (1/3)' . "\n",
             (string) stream_get_contents($stdout),
         );
     }
@@ -260,7 +260,7 @@ final class AdapterDetailsTest extends TestCase
         rewind($stderr);
 
         self::assertSame(
-            'Property "testTheDiscardWarningPercentageIsRounded" discarded 29 of 30 attempt(s) (97%); consider narrowing the generators' . PHP_EOL,
+            'Property "testTheDiscardWarningPercentageIsRounded" discarded 29 of 30 attempt(s) (97%); consider narrowing the generators' . "\n",
             (string) stream_get_contents($stderr),
         );
     }
@@ -282,7 +282,7 @@ final class AdapterDetailsTest extends TestCase
         rewind($stderr);
 
         self::assertSame(
-            'Property "testTheDiscardWarningLineIsExact" discarded 16 of 17 attempt(s) (94%); consider narrowing the generators' . PHP_EOL,
+            'Property "testTheDiscardWarningLineIsExact" discarded 16 of 17 attempt(s) (94%); consider narrowing the generators' . "\n",
             (string) stream_get_contents($stderr),
         );
     }

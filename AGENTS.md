@@ -137,12 +137,15 @@ replay (`PropertyDefinition::$replayRegressions = false`), the **env**
   caught by CI). If a CPU-bound hot path in this adapter ever needs
   benchmarking, it needs its own PHPUnit-native harness, not a copy of the
   Testo one.
-- **Report lines use a literal `"\n"`, never `PHP_EOL`.** `PropertyCheck`'s
-  distribution report and discard warning, and `VerboseListener`'s trace, are
-  machine-greppable CLI output. `PHP_EOL` is `\r\n` on Windows, which breaks
-  every test (and every downstream tool) that matches these lines with a
-  plain-LF regex or exact string. This shipped once and was caught by the
-  Windows CI job, not by review — do not "fix" it back to `PHP_EOL`.
+- **Report lines use a literal `"\n"`, never `PHP_EOL` — in `src/` AND in
+  tests.** `PropertyCheck`'s distribution report and discard warning, and
+  `VerboseListener`'s trace, are machine-greppable CLI output. `PHP_EOL` is
+  `\r\n` on Windows: if the source emits it, plain-LF assertions break; if a
+  *test's expected string* builds it (`'...' . PHP_EOL`) while the source
+  emits a real `"\n"`, the assertion breaks the other way on Windows only.
+  Both directions of this shipped in the same PR, one commit apart, and both
+  were caught by the Windows CI job — grep the whole tree for `PHP_EOL`
+  before touching this area again, do not fix only `src/`.
 - A pinned `seed()` makes falsification deterministic in tests; the corpus
   tests deliberately run unseeded (replay only happens for unseeded
   properties) and rely on a falsification probability that is
