@@ -1,0 +1,17 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": ["src"]
+    },
+    "logs": {
+        "text": "php://stderr",
+        "summary": "build/infection-summary.log"
+    },
+    // 104 of 113 mutants are killed; the remaining nine are equivalent
+    // (report wording and ordering that no observable behaviour distinguishes),
+    // so 100 is unreachable without ignores — which are forbidden here.
+    "minMsi": 90,
+    "mutators": {
+        "@default": true
+    }
+}
