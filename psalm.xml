@@ -17,8 +17,17 @@
             throws to report a FAILURE (an arbitrary exception would surface as an
             ERROR instead) — and TestCase::addToAssertionCount(), the only way a
             passing property registers as an assertion rather than a risky test.
-            These two references are this adapter's entire boundary with PHPUnit
-            internals; anything else stays at level 1.
+            Constructing AssertionFailedError needs its own entry, and the class
+            name in it matters: the constructor is inherited from
+            PHPUnit\Framework\Exception, and Psalm's own diagnostic text names
+            THAT class ("Constructor PHPUnit\Framework\Exception::__construct is
+            internal ..."). Suppressing Exception::__construct verbatim does NOT
+            silence it — Psalm keys InternalMethod suppression to the class named
+            at the `new` call site (AssertionFailedError), not to the class that
+            declares the constructor. Verified empirically; do not "simplify" this
+            entry back to Exception::__construct.
+            These two classes/methods are this adapter's entire boundary with
+            PHPUnit internals; anything else stays at level 1.
         -->
         <InternalClass>
             <errorLevel type="suppress">
@@ -28,7 +37,6 @@
         <InternalMethod>
             <errorLevel type="suppress">
                 <referencedMethod name="PHPUnit\Framework\TestCase::addToAssertionCount"/>
-                <referencedMethod name="PHPUnit\Framework\Exception::__construct"/>
                 <referencedMethod name="PHPUnit\Framework\AssertionFailedError::__construct"/>
             </errorLevel>
         </InternalMethod>

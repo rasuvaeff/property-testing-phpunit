@@ -108,20 +108,41 @@ replay (`PropertyDefinition::$replayRegressions = false`), the **env**
 ## Invariants & gotchas
 
 - **PHPUnit marks nearly its whole surface `@internal`.** The `psalm.xml`
-  `<issueHandlers>` block allows exactly two references:
+  `<issueHandlers>` block allows exactly two boundary points:
   `PHPUnit\Framework\AssertionFailedError` (the documented type a third-party
   integration throws to report a FAILURE — an arbitrary exception would
   surface as an ERROR) and `TestCase::addToAssertionCount()` (the only way a
-  passing property is an assertion rather than a risky test). Do not widen
-  that list casually, and never add `@psalm-suppress` in code.
+  passing property is an assertion rather than a risky test). The first point
+  needs two XML entries (`InternalClass` on the class, `InternalMethod` on its
+  constructor) — see the comment in `psalm.xml` for the non-obvious part:
+  the constructor suppression must name `AssertionFailedError`, not the
+  parent `Exception` class that Psalm's own error text names as the
+  constructor's declarer. Do not widen this list casually, and never add
+  `@psalm-suppress` in code.
 - **`forAll()` reads the calling test method's name via `debug_backtrace`** —
   it becomes the property id (`Class::method`) that keys events and the
   regression corpus. The trait method must therefore be called directly from
   the test method, never through an intermediate helper, and it stays
   `final protected`.
 - **Infection runs through PHPUnit** — `infection.json5` sets no
-  `testFramework` (default is phpunit), `minMsi` 85. No
+  `testFramework` (default is phpunit), `minMsi` 90. No
   `testo/bridge-infection` here.
+- **No `benchmarks/` here, deliberately.** The root `AGENTS.md` template
+  benchmarks convention (`#[Bench]` + `composer bench` running
+  `testo --suite=Benchmarks`) is Testo-specific, and this package has zero
+  `testo/*` in `require`/`require-dev` on purpose (drop-in for PHPUnit users
+  must not pull Testo transitively). `.php-cs-fixer.php` does not point its
+  Finder at `/benchmarks` for the same reason — pointing at a directory that
+  will never exist breaks `composer cs`/`build` outright (this shipped once,
+  caught by CI). If a CPU-bound hot path in this adapter ever needs
+  benchmarking, it needs its own PHPUnit-native harness, not a copy of the
+  Testo one.
+- **Report lines use a literal `"\n"`, never `PHP_EOL`.** `PropertyCheck`'s
+  distribution report and discard warning, and `VerboseListener`'s trace, are
+  machine-greppable CLI output. `PHP_EOL` is `\r\n` on Windows, which breaks
+  every test (and every downstream tool) that matches these lines with a
+  plain-LF regex or exact string. This shipped once and was caught by the
+  Windows CI job, not by review — do not "fix" it back to `PHP_EOL`.
 - A pinned `seed()` makes falsification deterministic in tests; the corpus
   tests deliberately run unseeded (replay only happens for unseeded
   properties) and rely on a falsification probability that is

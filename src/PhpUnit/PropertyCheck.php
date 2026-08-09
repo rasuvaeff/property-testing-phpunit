@@ -263,7 +263,7 @@ final class PropertyCheck
             );
         }
 
-        fwrite($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)) . PHP_EOL);
+        fwrite($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)) . "\n");
     }
 
     private function warnOnExcessiveSkips(RunStatistics $statistics): void
@@ -281,7 +281,7 @@ final class PropertyCheck
             $skips,
             $attempts,
             (int) round(((float) $skips / (float) $attempts) * 100.0),
-        ) . PHP_EOL);
+        ) . "\n");
     }
 
     private function envRuns(): ?int

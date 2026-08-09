@@ -17,6 +17,7 @@ use Rasuvaeff\PropertyTesting\GaveUpException;
 use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
+use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 
@@ -25,6 +26,19 @@ use Rasuvaeff\PropertyTesting\PropertyViolationException;
 final class PropertyCheckTest extends TestCase
 {
     use PropertyTesting;
+
+    /** @var \Closure(): void */
+    private \Closure $restoreEnv;
+
+    protected function setUp(): void
+    {
+        $this->restoreEnv = Env::isolateProperty();
+    }
+
+    protected function tearDown(): void
+    {
+        ($this->restoreEnv)();
+    }
 
     public function testPassingPropertyCountsAnAssertion(): void
     {

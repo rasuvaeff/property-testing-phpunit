@@ -95,6 +95,6 @@ final class VerboseListener implements PropertyListener
 
     private function log(string $line): void
     {
-        fwrite($this->stream, $line . PHP_EOL);
+        fwrite($this->stream, $line . "\n");
     }
 }
