@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — 2026-08-10
+
+- Added support for PHPUnit 13 on PHP 8.4.1 or newer while preserving PHPUnit
+  11 and 12 support for PHP 8.3 projects.
+
 ## 0.1.0 — 2026-08-09
 
 - Initial release: a PHPUnit adapter for the property-testing engine — the
