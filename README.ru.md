@@ -30,8 +30,11 @@ shrink до минимального контрпримера, который р
 ## Требования
 
 - PHP 8.3+
-- [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0`
+- [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
 - [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.1`
+
+PHPUnit 13 требует PHP 8.4.1 или новее. На PHP 8.3 Composer выбирает
+совместимый релиз PHPUnit 11 или 12.
 
 ## Установка
 
