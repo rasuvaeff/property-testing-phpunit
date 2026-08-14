@@ -18,6 +18,7 @@ use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\RegressionViolationException;
+use Rasuvaeff\PropertyTesting\Runner\Phase;
 
 /**
  * The environment contract, byte-for-byte the Testo adapter's: PROPERTY_RUNS
@@ -275,6 +276,265 @@ final class EnvironmentParityTest extends TestCase
         rewind($stdout);
 
         self::assertStringContainsString('Property "queue::drain-order" distribution:', (string) stream_get_contents($stdout));
+    }
+
+    public function testPropertyPhasesLimitsTheStagesOfEveryProperty(): void
+    {
+        // The pull-request gate: examples and corpus only, no random phase. A
+        // property that a random draw would falsify therefore passes, having
+        // honestly checked less.
+        putenv('PROPERTY_PHASES=examples,corpus');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+            ->runs(100)
+            ->check(static function (int $value): void {
+                self::assertLessThan(100, $value);
+            });
+    }
+
+    public function testPropertyPhasesRejectsAnUnknownStage(): void
+    {
+        putenv('PROPERTY_PHASES=examples,rundom');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('PROPERTY_PHASES must be a comma-separated list of examples, corpus, random, shrink, got "rundom"');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+    }
+
+    public function testPropertyPhasesWinsOverAnExplicitPhaseList(): void
+    {
+        // The environment dials the suite: a CI gate has to be able to cut the
+        // random phase out of a property that asks for it in code.
+        putenv('PROPERTY_PHASES=examples,corpus');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+            ->runs(100)
+            ->phases([Phase::Examples, Phase::Corpus, Phase::Random, Phase::Shrink])
+            ->check(static function (int $value): void {
+                self::assertLessThan(100, $value);
+            });
+    }
+
+    public function testPropertyPhasesIgnoresSpacingAndCase(): void
+    {
+        // The variable is typed by a human on a command line.
+        putenv('PROPERTY_PHASES= Examples , CORPUS ');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+            ->runs(100)
+            ->check(static function (int $value): void {
+                self::assertLessThan(100, $value);
+            });
+    }
+
+    public function testPropertyDerandomizeWinsOverAnExplicitFalse(): void
+    {
+        putenv('PROPERTY_DERANDOMIZE=1');
+
+        self::assertSame(
+            $this->resolvedSeed(derandomize: false),
+            $this->resolvedSeed(derandomize: false),
+        );
+    }
+
+    public function testPropertyDerandomizeZeroLeavesTheSuiteRandom(): void
+    {
+        // '0' is the documented off switch, like PROPERTY_VERBOSE.
+        putenv('PROPERTY_DERANDOMIZE=0');
+
+        self::assertNotSame($this->resolvedSeed(), $this->resolvedSeed());
+    }
+
+    public function testAnEmptyPropertyPathIsNotAPath(): void
+    {
+        // '' means unset for every variable in this table; handing it to the
+        // engine as a path would fail the run instead.
+        putenv('PROPERTY_PATH=');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(5)
+            ->seed(1)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+    }
+
+    public function testPropertyDerandomizeMakesAnUnseededPropertyReproducible(): void
+    {
+        putenv('PROPERTY_DERANDOMIZE=1');
+
+        // The seed is what derandomization decides; asserting on a generated
+        // value would also pass for a generator that ignores its seed.
+        self::assertSame($this->resolvedSeed(), $this->resolvedSeed());
+    }
+
+    public function testWithoutDerandomizeAnUnseededPropertyDrawsAFreshSeed(): void
+    {
+        // The other half of the previous test: without the variable the two
+        // runs draw independent seeds, so the assertion above is about the
+        // variable rather than about a degenerate generator.
+        self::assertNotSame($this->resolvedSeed(), $this->resolvedSeed());
+    }
+
+    public function testPropertyPathReplaysARecordedDescentAndTheExplicitPathWins(): void
+    {
+        $path = $this->pathOfAFailure(seed: 4242);
+
+        // Replaying it through the environment reproduces the same shrunk
+        // counterexample.
+        putenv('PROPERTY_SEED=4242');
+        putenv('PROPERTY_PATH=' . $path);
+
+        try {
+            $this->runFalsifiableProperty();
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+            self::assertSame($path, $previous->getCounterExample()->path);
+
+            // A path is followed, not searched for: one body execution per
+            // recorded step instead of one per candidate tried. Without it the
+            // same descent costs many more trials, so this is the assertion
+            // that fails when the variable is ignored.
+            self::assertLessThan($this->trialsOfAFailure(seed: 4242), $previous->getCounterExample()->shrinkTrials);
+        }
+
+        // And an explicit path(), like an explicit seed(), wins over the
+        // variable: the bogus one below never runs.
+        putenv('PROPERTY_PATH=value:9999');
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->seed(4242)
+                ->path($path)
+                ->check(static function (int $value): void {
+                    self::assertLessThan(100, $value);
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+        }
+    }
+
+    public function testAClosureDerivedIdIsReportedOnStderr(): void
+    {
+        $stderr = fopen('php://memory', 'w+');
+        self::assertIsResource($stderr);
+
+        // Reproduces what Pest does: forAll() called from a closure, so the
+        // derived id carries {closure and the corpus key would move.
+        $run = function () use ($stderr): void {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(3)
+                ->output(STDOUT, $stderr)
+                ->check(static function (int $value): void {
+                    self::assertGreaterThanOrEqual(0, $value);
+                });
+        };
+        $run();
+
+        rewind($stderr);
+        $warning = (string) stream_get_contents($stderr);
+
+        // The whole line, newline included: this is machine-greppable CLI
+        // output, and "contains" would not notice it losing its terminator.
+        self::assertMatchesRegularExpression(
+            '/^Property id "[^"]*\{closure[^"]*" comes from a closure and is not stable: .+pass an explicit property id\n$/s',
+            $warning,
+        );
+    }
+
+    public function testANamedPropertyWarnsAboutNothing(): void
+    {
+        $stderr = fopen('php://memory', 'w+');
+        self::assertIsResource($stderr);
+
+        $run = function () use ($stderr): void {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->id('named::property')
+                ->runs(3)
+                ->output(STDOUT, $stderr)
+                ->check(static function (int $value): void {
+                    self::assertGreaterThanOrEqual(0, $value);
+                });
+        };
+        $run();
+
+        rewind($stderr);
+
+        self::assertSame('', (string) stream_get_contents($stderr));
+    }
+
+    /**
+     * The seed the engine actually ran with, as the PropertyStarted event
+     * reports it — the one observable that says what a seed knob decided.
+     */
+    private function resolvedSeed(?bool $derandomize = null): int
+    {
+        $listener = new RecordingListener();
+
+        $check = $this->forAll(['value' => Gen::intBetween(0, 1_000_000)])
+            ->id('parity::derandomize')
+            ->runs(1)
+            ->listeners($listener);
+
+        if ($derandomize !== null) {
+            $check->derandomize($derandomize);
+        }
+
+        $check
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+
+        foreach ($listener->events as $event) {
+            if ($event instanceof PropertyStarted) {
+                return $event->seed;
+            }
+        }
+
+        self::fail('No PropertyStarted event was recorded');
+    }
+
+    private function trialsOfAFailure(int $seed): int
+    {
+        $previousPath = getenv('PROPERTY_PATH');
+        putenv('PROPERTY_PATH');
+
+        try {
+            $this->runFalsifiableProperty($seed);
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            return $previous->getCounterExample()->shrinkTrials;
+        } finally {
+            putenv($previousPath === false ? 'PROPERTY_PATH' : 'PROPERTY_PATH=' . $previousPath);
+        }
+    }
+
+    private function pathOfAFailure(int $seed): string
+    {
+        try {
+            $this->runFalsifiableProperty($seed);
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            return $previous->getCounterExample()->path;
+        }
     }
 
     private function runFalsifiableProperty(

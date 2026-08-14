@@ -9,7 +9,8 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support;
  *
  * `putenv('NAME')` in tearDown does not undo `putenv('NAME=value')` — it
  * deletes the variable. A developer or CI job that exported `PROPERTY_DB`,
- * `PROPERTY_RUNS`, `PROPERTY_SEED` or `PROPERTY_VERBOSE` for the whole run
+ * `PROPERTY_RUNS`, `PROPERTY_SEED`, `PROPERTY_VERBOSE`, `PROPERTY_PHASES`,
+ * `PROPERTY_DERANDOMIZE` or `PROPERTY_PATH` for the whole run
  * would silently lose it partway through the suite, and every later test would
  * observe a different configuration than the one it was invoked with. Clearing
  * them in setUp through this helper also isolates the suite from an ambient
@@ -68,6 +69,9 @@ final class Env
             'PROPERTY_SEED' => null,
             'PROPERTY_VERBOSE' => null,
             'PROPERTY_DB' => null,
+            'PROPERTY_PHASES' => null,
+            'PROPERTY_DERANDOMIZE' => null,
+            'PROPERTY_PATH' => null,
         ]);
     }
 }

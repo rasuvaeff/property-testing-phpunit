@@ -105,6 +105,11 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `budgetMs(int)` | Wall-clock budget for the whole random phase — running out fails with `TimeBudgetExceededException` |
 | `examples(array)` | Fixed positional argument tuples run **before** the random phase; a failing example short-circuits, unshrunk |
 | `listeners(...)` | `PropertyListener` observers of the engine's lifecycle events |
+| `shrink(ShrinkMode)` | How hard to minimise: `Full` (default), `Off` (report the input as generated), `Bounded` with a budget |
+| `shrinkBudgetMs(int)` | Wall-clock budget for the descent — the one knob that costs determinism, since how far it gets depends on how long the body takes |
+| `phases(array)` | Stages to perform (`Phase::Examples`, `Corpus`, `Random`, `Shrink`) — a subset trades coverage for time on purpose |
+| `derandomize(bool)` | Derives an unset seed from the property id instead of drawing one; an explicit `seed()` still wins |
+| `path(string)` | Replays a recorded shrink descent instead of searching for it; needs the seed that produced it |
 | `output($stdout, $stderr)` | Redirects the distribution report, discard warning and verbose trace (used by this package's own tests) |
 
 ### Naming a property (`id()`)
@@ -154,6 +159,9 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 | `PROPERTY_SEED` | Integer seed for any property without an explicit `seed()` (replay a whole suite). An explicit `seed()` still wins |
 | `PROPERTY_VERBOSE` | Any value except `''`/`'0'` logs every run's generated arguments and each accepted shrink step |
 | `PROPERTY_DB` | Directory path enabling the regression corpus. Unset means off, nothing is written |
+| `PROPERTY_PHASES` | Comma-separated stage list (`examples,corpus,random,shrink`, case-insensitive) that overrides `phases()` — an unknown name throws rather than skipping a stage. `examples,corpus` is the fast pull-request gate |
+| `PROPERTY_DERANDOMIZE` | Any value except `''`/`'0'` derives every unset seed from the property id, making a whole suite reproducible without editing it |
+| `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins |
 
 The corpus format is exactly the one `rasuvaeff/property-testing` 2.8 wrote —
 a corpus recorded under Testo (or under 2.x) replays here and vice versa. On

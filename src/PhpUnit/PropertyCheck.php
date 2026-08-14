@@ -7,16 +7,19 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\ArbitraryInterface;
+use Rasuvaeff\PropertyTesting\PropertyId;
 use Rasuvaeff\PropertyTesting\PropertyListener;
 use Rasuvaeff\PropertyTesting\Runner\CallableTrialExecutor;
 use Rasuvaeff\PropertyTesting\Runner\CoverageFailed;
 use Rasuvaeff\PropertyTesting\Runner\FilesystemCorpus;
 use Rasuvaeff\PropertyTesting\Runner\GaveUp;
 use Rasuvaeff\PropertyTesting\Runner\Passed;
+use Rasuvaeff\PropertyTesting\Runner\Phase;
 use Rasuvaeff\PropertyTesting\Runner\PropertyConfig;
 use Rasuvaeff\PropertyTesting\Runner\PropertyDefinition;
 use Rasuvaeff\PropertyTesting\Runner\PropertyRunner;
 use Rasuvaeff\PropertyTesting\Runner\RunStatistics;
+use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
 use Rasuvaeff\PropertyTesting\Runner\TimeBudgetExceeded;
 
 /**
@@ -43,12 +46,34 @@ final class PropertyCheck
      */
     private const float SKIP_RATE_WARNING_THRESHOLD = 0.9;
 
+    /**
+     * Phase names accepted by `PROPERTY_PHASES`, lowercase. Spelled out rather
+     * than derived from the enum: the variable is a public contract shared
+     * with the Testo adapter, and it must not start accepting a new spelling
+     * merely because a case was renamed upstream.
+     *
+     * @var array<string, Phase>
+     */
+    private const array PHASES_BY_NAME = [
+        'examples' => Phase::Examples,
+        'corpus' => Phase::Corpus,
+        'random' => Phase::Random,
+        'shrink' => Phase::Shrink,
+    ];
+
     private ?int $runs = null;
     private ?int $seed = null;
     private ?int $maxShrinks = null;
     private ?int $maxDiscards = null;
     private ?int $timeoutMs = null;
     private ?int $budgetMs = null;
+    private ?ShrinkMode $shrink = null;
+    private ?int $shrinkBudgetMs = null;
+    private ?string $path = null;
+    private ?bool $derandomize = null;
+
+    /** @var ?list<Phase> */
+    private ?array $phases = null;
 
     /** @var list<list<mixed>> */
     private array $examples = [];
@@ -158,6 +183,71 @@ final class PropertyCheck
     }
 
     /**
+     * How hard to minimise a counterexample: {@see ShrinkMode::Full} (the
+     * default), {@see ShrinkMode::Off} to report the input as generated, or
+     * {@see ShrinkMode::Bounded} together with {@see shrinkBudgetMs()}.
+     */
+    public function shrink(ShrinkMode $shrink): self
+    {
+        $this->shrink = $shrink;
+
+        return $this;
+    }
+
+    /**
+     * Wall-clock budget for the shrink descent, in milliseconds — the one knob
+     * here that costs determinism: how far the descent gets depends on how
+     * long the body takes, so the same seed can minimise differently on a
+     * fast and a slow machine. It answers "the descent hung", not "reproduce
+     * this exactly".
+     */
+    public function shrinkBudgetMs(int $shrinkBudgetMs): self
+    {
+        $this->shrinkBudgetMs = $shrinkBudgetMs;
+
+        return $this;
+    }
+
+    /**
+     * Which stages this run performs, in run order — a subset trades coverage
+     * for time on purpose (replaying only the examples and the corpus turns a
+     * minutes-long suite into a seconds-long pull-request gate).
+     *
+     * @param list<Phase> $phases
+     */
+    public function phases(array $phases): self
+    {
+        $this->phases = $phases;
+
+        return $this;
+    }
+
+    /**
+     * Derives an unset seed from the property id instead of drawing it at
+     * random, so the same property on the same code always selects the same
+     * inputs. An explicit {@see seed()} still wins.
+     */
+    public function derandomize(bool $derandomize = true): self
+    {
+        $this->derandomize = $derandomize;
+
+        return $this;
+    }
+
+    /**
+     * Replays the shrink descent of an earlier failure, as reported by
+     * `CounterExample::$path`, instead of searching for it again. It needs the
+     * seed of the run that produced it — the steps mean nothing against
+     * another one.
+     */
+    public function path(string $path): self
+    {
+        $this->path = $path;
+
+        return $this;
+    }
+
+    /**
      * Fixed positional argument tuples run before the random phase. A failing
      * example short-circuits and is reported unshrunk — it is already minimal.
      *
@@ -219,10 +309,21 @@ final class PropertyCheck
                 maxDiscards: $this->maxDiscards,
                 timeoutMs: $this->timeoutMs,
                 budgetMs: $this->budgetMs,
+                shrink: $this->shrink,
+                shrinkBudgetMs: $this->shrinkBudgetMs,
+                // The environment dials the suite; the code pins the property.
+                // A phase list is the CI gate knob, so the variable wins over
+                // the setter — while a path, like a seed, is a replay of one
+                // specific failure and yields to the one written down.
+                phases: $this->envPhases() ?? $this->phases,
+                derandomize: $this->envDerandomize() ?? $this->derandomize ?? false,
+                path: $this->path ?? $this->envPath(),
             ),
             examples: $this->examples,
             replayRegressions: $this->seed === null,
         );
+
+        $this->warnOnUnstableId();
 
         $listeners = $this->listeners;
 
@@ -290,6 +391,23 @@ final class PropertyCheck
         fwrite($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)) . "\n");
     }
 
+    /**
+     * An id derived from a closure keys the corpus by something that moves —
+     * the engine names the problem, this prints it. Same channel as the
+     * excessive-discard warning, and impossible to hit once {@see id()} has
+     * been called.
+     */
+    private function warnOnUnstableId(): void
+    {
+        $warning = PropertyId::unstableWarning($this->id);
+
+        if ($warning === null) {
+            return;
+        }
+
+        fwrite($this->stderr, $warning . "\n");
+    }
+
     private function warnOnExcessiveSkips(RunStatistics $statistics): void
     {
         $skips = $statistics->discards;
@@ -306,6 +424,76 @@ final class PropertyCheck
             $attempts,
             (int) round(((float) $skips / (float) $attempts) * 100.0),
         ) . "\n");
+    }
+
+    /**
+     * `PROPERTY_PHASES` selects the stages for the whole suite: a
+     * comma-separated list of phase names, case-insensitive
+     * (`examples,corpus` is the fast pull-request gate). An unknown name is an
+     * error rather than a skipped stage — a run that silently performed fewer
+     * stages would report green having checked less.
+     *
+     * @return ?list<Phase>
+     */
+    private function envPhases(): ?array
+    {
+        $env = getenv('PROPERTY_PHASES');
+
+        if ($env === false || $env === '') {
+            return null;
+        }
+
+        $phases = [];
+
+        foreach (explode(',', $env) as $name) {
+            $trimmed = trim($name);
+            $phase = self::PHASES_BY_NAME[strtolower($trimmed)] ?? null;
+
+            if ($phase === null) {
+                throw new \InvalidArgumentException(sprintf(
+                    'PROPERTY_PHASES must be a comma-separated list of %s, got "%s"',
+                    implode(', ', array_keys(self::PHASES_BY_NAME)),
+                    $trimmed,
+                ));
+            }
+
+            $phases[] = $phase;
+        }
+
+        return $phases;
+    }
+
+    /**
+     * `PROPERTY_DERANDOMIZE` (any value except '' and '0') derives every
+     * unset seed from the property id, which makes a whole suite reproducible
+     * without editing a line of it.
+     */
+    private function envDerandomize(): ?bool
+    {
+        $env = getenv('PROPERTY_DERANDOMIZE');
+
+        if ($env === false || $env === '') {
+            return null;
+        }
+
+        return $env !== '0';
+    }
+
+    /**
+     * `PROPERTY_PATH` replays a recorded shrink descent. It is one failure's
+     * replay, so an explicit {@see path()} wins over it, exactly as an
+     * explicit {@see seed()} wins over `PROPERTY_SEED` — and like a path
+     * written in code it needs the seed that produced it.
+     */
+    private function envPath(): ?string
+    {
+        $env = getenv('PROPERTY_PATH');
+
+        if ($env === false || $env === '') {
+            return null;
+        }
+
+        return $env;
     }
 
     private function envRuns(): ?int
