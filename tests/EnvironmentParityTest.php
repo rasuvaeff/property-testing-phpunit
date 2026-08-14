@@ -6,7 +6,10 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests;
 
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\TestCase;
+use Rasuvaeff\PropertyTesting\Classify;
+use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
 use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
@@ -23,6 +26,10 @@ use Rasuvaeff\PropertyTesting\RegressionViolationException;
  * and replays the regression corpus.
  */
 #[CoversClass(PropertyCheck::class)]
+// Every test here enters through the trait's forAll(), and the id it derives
+// (or is handed) is part of what this suite pins — so the trait is covered in
+// fact, and saying so is what lets its mutants be judged by these tests.
+#[CoversTrait(PropertyTesting::class)]
 final class EnvironmentParityTest extends TestCase
 {
     use PropertyTesting;
@@ -196,12 +203,97 @@ final class EnvironmentParityTest extends TestCase
         }
     }
 
-    private function runFalsifiableProperty(?int $seed = null): void
+    public function testAnExplicitIdKeysTheCorpusEntryAndTheEvents(): void
     {
+        // The point of naming a property: two calls that share an id share the
+        // recorded counterexample, wherever in the file they are written and
+        // whatever PHP would have called the closure they run in.
+        putenv('PROPERTY_DB=' . $this->corpusDir);
+        $listener = new RecordingListener();
+
+        try {
+            $this->runFalsifiableProperty(id: 'stack::push-then-pop', listener: $listener);
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+        }
+
+        $started = array_values(array_filter(
+            $listener->events,
+            static fn(object $event): bool => $event instanceof PropertyStarted,
+        ));
+        self::assertCount(1, $started);
+        self::assertSame('stack::push-then-pop', $started[0]->propertyId);
+
+        // Same id, written as a different call: the corpus replays.
+        try {
+            $this->runFalsifiableProperty(id: 'stack::push-then-pop');
+
+            self::fail('The recorded regression should have replayed');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(RegressionViolationException::class, $failure->getPrevious());
+        }
+    }
+
+    public function testADifferentExplicitIdDoesNotInheritTheRecordedCounterexample(): void
+    {
+        putenv('PROPERTY_DB=' . $this->corpusDir);
+
+        try {
+            $this->runFalsifiableProperty(id: 'stack::first');
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+        }
+
+        // A different name is a different property: it falsifies on its own
+        // random phase rather than replaying the other one's regression.
+        try {
+            $this->runFalsifiableProperty(id: 'stack::second');
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+        }
+    }
+
+    public function testAnExplicitIdIsAlsoTheNameInPrintedOutput(): void
+    {
+        $stdout = fopen('php://memory', 'w+');
+        self::assertIsResource($stdout);
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->id('queue::drain-order')
+            ->runs(20)
+            ->output($stdout, STDERR)
+            ->check(static function (int $value): void {
+                Classify::label($value % 2 === 0 ? 'even' : 'odd');
+            });
+
+        rewind($stdout);
+
+        self::assertStringContainsString('Property "queue::drain-order" distribution:', (string) stream_get_contents($stdout));
+    }
+
+    private function runFalsifiableProperty(
+        ?int $seed = null,
+        ?string $id = null,
+        ?RecordingListener $listener = null,
+    ): void {
         // Unseeded by default: corpus replay only runs for unseeded
         // properties, and a random value below 100 for all 100 runs is
         // practically impossible, so falsification is certain either way.
         $check = $this->forAll(['value' => Gen::intBetween(0, 10_000)])->runs(100);
+
+        if ($id !== null) {
+            $check->id($id);
+        }
+
+        if ($listener instanceof RecordingListener) {
+            $check->listeners($listener);
+        }
 
         if ($seed !== null) {
             $check->seed($seed);

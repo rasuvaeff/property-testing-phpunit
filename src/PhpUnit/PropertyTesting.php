@@ -25,6 +25,11 @@ use Rasuvaeff\PropertyTesting\ArbitraryInterface;
 trait PropertyTesting
 {
     /**
+     * The id is derived from the calling method, which is why `forAll()` belongs
+     * directly in a test method. Called from a closure, derive nothing — name the
+     * property with {@see PropertyCheck::id()}, because PHP has no stable name for
+     * a closure (see {@see \Rasuvaeff\PropertyTesting\PropertyId}).
+     *
      * @param array<string, ArbitraryInterface> $generators One generator per
      *   property-body parameter, keyed by parameter name.
      */
