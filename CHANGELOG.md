@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-08-14
 
 - Added the 0.2 run knobs, as fluent setters and as environment variables:
   `shrink()`/`shrinkBudgetMs()` (report a counterexample as generated, or bound
