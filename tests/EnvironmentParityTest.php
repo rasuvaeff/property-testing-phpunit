@@ -335,9 +335,10 @@ final class EnvironmentParityTest extends TestCase
     {
         putenv('PROPERTY_DERANDOMIZE=1');
 
-        $arguments = fn(): array => $this->firstArguments(derandomize: false);
-
-        self::assertSame($arguments(), $arguments());
+        self::assertSame(
+            $this->resolvedSeed(derandomize: false),
+            $this->resolvedSeed(derandomize: false),
+        );
     }
 
     public function testPropertyDerandomizeZeroLeavesTheSuiteRandom(): void
@@ -345,7 +346,7 @@ final class EnvironmentParityTest extends TestCase
         // '0' is the documented off switch, like PROPERTY_VERBOSE.
         putenv('PROPERTY_DERANDOMIZE=0');
 
-        self::assertNotSame($this->firstArguments(), $this->firstArguments());
+        self::assertNotSame($this->resolvedSeed(), $this->resolvedSeed());
     }
 
     public function testAnEmptyPropertyPathIsNotAPath(): void
@@ -366,15 +367,17 @@ final class EnvironmentParityTest extends TestCase
     {
         putenv('PROPERTY_DERANDOMIZE=1');
 
-        self::assertSame($this->firstArguments(), $this->firstArguments());
+        // The seed is what derandomization decides; asserting on a generated
+        // value would also pass for a generator that ignores its seed.
+        self::assertSame($this->resolvedSeed(), $this->resolvedSeed());
     }
 
     public function testWithoutDerandomizeAnUnseededPropertyDrawsAFreshSeed(): void
     {
         // The other half of the previous test: without the variable the two
-        // runs are independent, so the assertion above is about the variable
-        // rather than about the generator being degenerate.
-        self::assertNotSame($this->firstArguments(), $this->firstArguments());
+        // runs draw independent seeds, so the assertion above is about the
+        // variable rather than about a degenerate generator.
+        self::assertNotSame($this->resolvedSeed(), $this->resolvedSeed());
     }
 
     public function testPropertyPathReplaysARecordedDescentAndTheExplicitPathWins(): void
@@ -394,6 +397,12 @@ final class EnvironmentParityTest extends TestCase
             $previous = $failure->getPrevious();
             self::assertInstanceOf(PropertyViolationException::class, $previous);
             self::assertSame($path, $previous->getCounterExample()->path);
+
+            // A path is followed, not searched for: one body execution per
+            // recorded step instead of one per candidate tried. Without it the
+            // same descent costs many more trials, so this is the assertion
+            // that fails when the variable is ignored.
+            self::assertLessThan($this->trialsOfAFailure(seed: 4242), $previous->getCounterExample()->shrinkTrials);
         }
 
         // And an explicit path(), like an explicit seed(), wins over the
@@ -465,11 +474,10 @@ final class EnvironmentParityTest extends TestCase
     }
 
     /**
-     * The arguments of the first run, as a listener saw them.
-     *
-     * @return list<mixed>
+     * The seed the engine actually ran with, as the PropertyStarted event
+     * reports it — the one observable that says what a seed knob decided.
      */
-    private function firstArguments(?bool $derandomize = null): array
+    private function resolvedSeed(?bool $derandomize = null): int
     {
         $listener = new RecordingListener();
 
@@ -488,12 +496,31 @@ final class EnvironmentParityTest extends TestCase
             });
 
         foreach ($listener->events as $event) {
-            if ($event instanceof RunStarted) {
-                return array_values($event->arguments);
+            if ($event instanceof PropertyStarted) {
+                return $event->seed;
             }
         }
 
-        self::fail('No RunStarted event was recorded');
+        self::fail('No PropertyStarted event was recorded');
+    }
+
+    private function trialsOfAFailure(int $seed): int
+    {
+        $previousPath = getenv('PROPERTY_PATH');
+        putenv('PROPERTY_PATH');
+
+        try {
+            $this->runFalsifiableProperty($seed);
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            return $previous->getCounterExample()->shrinkTrials;
+        } finally {
+            putenv($previousPath === false ? 'PROPERTY_PATH' : 'PROPERTY_PATH=' . $previousPath);
+        }
     }
 
     private function pathOfAFailure(int $seed): string

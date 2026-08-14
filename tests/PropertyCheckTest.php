@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\Assume;
 use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\CoverageViolationException;
+use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
 use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\ExampleViolationException;
 use Rasuvaeff\PropertyTesting\GaveUpException;
@@ -238,7 +239,10 @@ final class PropertyCheckTest extends TestCase
 
     public function testDerandomizeMakesAnUnseededPropertyRepeatItself(): void
     {
-        $arguments = static function (self $case): array {
+        // The seed is what the knob decides, and the event reports the one the
+        // engine ran with — a generated value would also match for a generator
+        // that ignored its seed.
+        $seed = static function (self $case): int {
             $listener = new RecordingListener();
 
             $case->forAll(['value' => Gen::intBetween(0, 1_000_000)])
@@ -251,20 +255,21 @@ final class PropertyCheckTest extends TestCase
                 });
 
             foreach ($listener->events as $event) {
-                if ($event instanceof RunStarted) {
-                    return array_values($event->arguments);
+                if ($event instanceof PropertyStarted) {
+                    return $event->seed;
                 }
             }
 
-            self::fail('No RunStarted event was recorded');
+            self::fail('No PropertyStarted event was recorded');
         };
 
-        self::assertSame($arguments($this), $arguments($this));
+        self::assertSame($seed($this), $seed($this));
     }
 
     public function testPathReplaysTheRecordedDescent(): void
     {
         $path = '';
+        $trialsWithoutPath = 0;
 
         try {
             $this->forAll(['value' => Gen::intBetween(0, 10_000)])
@@ -279,6 +284,7 @@ final class PropertyCheckTest extends TestCase
             $previous = $failure->getPrevious();
             self::assertInstanceOf(PropertyViolationException::class, $previous);
             $path = $previous->getCounterExample()->path;
+            $trialsWithoutPath = $previous->getCounterExample()->shrinkTrials;
         }
 
         self::assertNotSame('', $path);
@@ -298,8 +304,12 @@ final class PropertyCheckTest extends TestCase
             self::assertInstanceOf(PropertyViolationException::class, $previous);
 
             // The replay walks the recorded steps instead of searching for
-            // them, and lands on the same counterexample.
+            // them: same counterexample, same path, and strictly fewer trials —
+            // one body execution per accepted step rather than one per
+            // candidate tried. The trial count is what fails if path() is
+            // ignored, since a deterministic search reproduces the path anyway.
             self::assertSame($path, $previous->getCounterExample()->path);
+            self::assertLessThan($trialsWithoutPath, $previous->getCounterExample()->shrinkTrials);
         }
     }
 

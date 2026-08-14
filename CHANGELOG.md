@@ -19,8 +19,6 @@
   0.2 engine fields; there is no version of this adapter that offers them
   against core 0.1.
 
-## Unreleased
-
 - Added `PropertyCheck::id()`: names the property, replacing the id derived
   from the calling method. The string is used verbatim — as the
   regression-corpus key, as the id on every event, and as the property's
