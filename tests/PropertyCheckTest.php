@@ -20,6 +20,8 @@ use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
+use Rasuvaeff\PropertyTesting\Runner\Phase;
+use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
 
 #[CoversClass(PropertyCheck::class)]
 #[CoversTrait(PropertyTesting::class)]
@@ -191,6 +193,125 @@ final class PropertyCheckTest extends TestCase
             ->seed(5)
             ->timeoutMs(60_000)
             ->budgetMs(60_000)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+    }
+
+    public function testShrinkOffReportsTheCounterexampleAsGenerated(): void
+    {
+        // Same behaviour as maxShrinks(0), reached through the mode the engine
+        // resolves internally — the two are one behaviour with one
+        // implementation, and this pins that the setter reaches it.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->seed(42)
+                ->shrink(ShrinkMode::Off)
+                ->check(static function (int $value): void {
+                    self::assertLessThan(100, $value);
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            $example = $previous->getCounterExample();
+            self::assertSame($example->originalArguments, $example->shrunkArguments);
+            self::assertSame(0, $example->shrinkSteps);
+        }
+    }
+
+    public function testPhasesWithoutRandomNeverReachesTheGenerators(): void
+    {
+        // Examples and corpus only: the property below would be falsified by
+        // the very first random draw, and passes because that phase is not in
+        // the list.
+        $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+            ->runs(100)
+            ->phases([Phase::Examples, Phase::Corpus])
+            ->check(static function (int $value): void {
+                self::assertLessThan(100, $value);
+            });
+    }
+
+    public function testDerandomizeMakesAnUnseededPropertyRepeatItself(): void
+    {
+        $arguments = static function (self $case): array {
+            $listener = new RecordingListener();
+
+            $case->forAll(['value' => Gen::intBetween(0, 1_000_000)])
+                ->id('check::derandomize')
+                ->runs(1)
+                ->derandomize()
+                ->listeners($listener)
+                ->check(static function (int $value): void {
+                    self::assertGreaterThanOrEqual(0, $value);
+                });
+
+            foreach ($listener->events as $event) {
+                if ($event instanceof RunStarted) {
+                    return array_values($event->arguments);
+                }
+            }
+
+            self::fail('No RunStarted event was recorded');
+        };
+
+        self::assertSame($arguments($this), $arguments($this));
+    }
+
+    public function testPathReplaysTheRecordedDescent(): void
+    {
+        $path = '';
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->seed(4242)
+                ->check(static function (int $value): void {
+                    self::assertLessThan(100, $value);
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+            $path = $previous->getCounterExample()->path;
+        }
+
+        self::assertNotSame('', $path);
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->seed(4242)
+                ->path($path)
+                ->check(static function (int $value): void {
+                    self::assertLessThan(100, $value);
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            // The replay walks the recorded steps instead of searching for
+            // them, and lands on the same counterexample.
+            self::assertSame($path, $previous->getCounterExample()->path);
+        }
+    }
+
+    public function testShrinkBudgetSetterIsAcceptedByTheEngine(): void
+    {
+        // Generous budget: this pins the wiring, not the timing — the budget
+        // is the one knob that costs determinism, and the engine already
+        // characterises what it does.
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(10)
+            ->seed(5)
+            ->shrinkBudgetMs(60_000)
             ->check(static function (int $value): void {
                 self::assertGreaterThanOrEqual(0, $value);
             });

@@ -98,6 +98,15 @@ parity is golden rule 3.
 | `PROPERTY_SEED` | Only when `seed()` was not called (explicit seed wins) | `/^-?\d+\z/` | Seeds every unseeded property; unset means a random seed per property | `InvalidArgumentException` |
 | `PROPERTY_VERBOSE` | Always | Any value except `''` and `'0'` enables | Attaches `VerboseListener`: every run's arguments/draws and each accepted shrink step | n/a (falsy values disable) |
 | `PROPERTY_DB` | Always (`false`/`''` = off, nothing written) | Directory path (created on demand) | Regression corpus via `FilesystemCorpus::fromEnv()`: record on falsification, replay before the random phase, prune on green replay. An explicit `seed()` disables replay for that property | n/a |
+| `PROPERTY_PHASES` | Always (`false`/`''` = unset) | Comma-separated phase names, case-insensitive: `examples`, `corpus`, `random`, `shrink` | Stages of every run, in run order — **overrides** `phases()` | `InvalidArgumentException` naming the accepted values |
+| `PROPERTY_DERANDOMIZE` | Always | Any value except `''` and `'0'` enables | Derives every unset seed from the property id — **overrides** `derandomize()` | n/a (falsy values disable) |
+| `PROPERTY_PATH` | Only when `path()` was not called (explicit path wins) | A recorded `CounterExample::$path` | Replays that shrink descent instead of searching for it; needs the seed of the run that produced it | engine rejects a path that would be a silent no-op |
+
+The split is deliberate and worth stating: **the environment dials the suite,
+the code pins the property.** `PROPERTY_RUNS`, `PROPERTY_PHASES` and
+`PROPERTY_DERANDOMIZE` are CI knobs and win over the chain; `PROPERTY_SEED` and
+`PROPERTY_PATH` replay one specific failure and yield to what a test wrote
+down.
 
 `maxDiscards` has no env override: unset means `runs * 10`.
 
@@ -123,7 +132,11 @@ replay (`PropertyDefinition::$replayRegressions = false`), the **env**
   it becomes the property id (`Class::method`) that keys events and the
   regression corpus. The trait method must therefore be called directly from
   the test method, never through an intermediate helper, and it stays
-  `final protected`.
+  `final protected`. From a closure there is no stable name to derive
+  (`{closure}` on PHP 8.3, `{closure:file:line}` from 8.4), so `PropertyCheck`
+  prints `PropertyId::unstableWarning()` on stderr for such an id, and
+  `id()` is the fix — it replaces the derived id for the corpus, the events
+  and the printed name alike.
 - **Infection runs through PHPUnit** — `infection.json5` sets no
   `testFramework` (default is phpunit), `minMsi` 90. No
   `testo/bridge-infection` here.

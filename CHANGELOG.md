@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Added the 0.2 run knobs, as fluent setters and as environment variables:
+  `shrink()`/`shrinkBudgetMs()` (report a counterexample as generated, or bound
+  the descent), `phases()` (`PROPERTY_PHASES`), `derandomize()`
+  (`PROPERTY_DERANDOMIZE`) and `path()` (`PROPERTY_PATH`, replaying a recorded
+  shrink descent instead of searching for it again). Precedence follows one
+  rule, now stated in the README: the environment dials the suite and wins for
+  `PROPERTY_RUNS`/`PROPERTY_PHASES`/`PROPERTY_DERANDOMIZE`, while the code pins
+  the property and wins for `seed()`/`path()`.
+- A property whose id was derived from a closure now says so on stderr, through
+  the channel that already carries the excessive-discard warning. Such an id
+  keys the regression corpus by something that moves — `{closure}` on PHP 8.3
+  collapses every closure of a class onto one key, and `{closure:file:line}`
+  from 8.4 moves when a line is inserted above. `id()` is the fix.
+- **Requires `rasuvaeff/property-testing-core` `^0.2`.** The knobs above are
+  0.2 engine fields; there is no version of this adapter that offers them
+  against core 0.1.
+
+## Unreleased
+
 - Added `PropertyCheck::id()`: names the property, replacing the id derived
   from the calling method. The string is used verbatim — as the
   regression-corpus key, as the id on every event, and as the property's
