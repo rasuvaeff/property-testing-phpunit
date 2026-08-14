@@ -30,8 +30,14 @@ Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
   `maxDiscards`, default `runs * 10`) — it never skips the PHPUnit test.
 - An explicit `seed()` **disables regression-corpus replay** for that
   property; the env `PROPERTY_SEED` does not.
-- `forAll()` must be called **directly from the test method** (it reads the
-  caller's name for the property id and corpus key).
+- `forAll()` derives the property id from the CALLING METHOD's name, so call it
+  directly from the test method — or pass an explicit id. From a closure the
+  derived id is unusable: `{closure}` on PHP 8.3 (every closure of a class
+  shares one corpus key) and `{closure:file:line}` from 8.4 (the key moves when
+  a line is inserted above). Nothing throws; the corpus silently stops
+  replaying. Pest's `it()`/`test()` bodies are the common case — call `->id()`
+  there; the string is used verbatim as the corpus key, the event id AND the
+  display name.
 - Environment contract and corpus format are identical to the Testo adapter
   and to frozen `rasuvaeff/property-testing` 2.8 — corpora interoperate.
 - Generators, `Shrinkable`, `Assume`, `Classify`, `Gen::draw()`, state-machine
@@ -45,11 +51,13 @@ Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
 ```php
 final protected function forAll(array $generators): PropertyCheck;
 // $generators: array<string, ArbitraryInterface>, keyed by closure parameter name
+// The property id is derived from the CALLING METHOD; override it with ->id()
 ```
 
 ### `Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck` (fluent, all setters return $this)
 
 ```php
+public function id(string $id): self;                // property identity: corpus key + event id + display name
 public function runs(int $runs): self;               // successful checks, default 100
 public function seed(int $seed): self;               // pin the random phase; disables corpus replay
 public function maxShrinks(int $maxShrinks): self;   // cap accepted shrink steps; 0 = no shrinking

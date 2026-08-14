@@ -67,10 +67,34 @@ final class PropertyCheck
      */
     public function __construct(
         private readonly TestCase $testCase,
-        private readonly string $id,
-        private readonly string $name,
+        private string $id,
+        private string $name,
         private readonly array $generators,
     ) {}
+
+    /**
+     * Names the property, replacing the id derived from the calling method.
+     *
+     * The id keys the regression corpus entry and every event, so it has to
+     * name the same property tomorrow. Derived from the caller it does — for a
+     * test method. From a **closure** it cannot: PHP 8.3 calls every closure of
+     * a class `{closure}`, so two properties in one file share a corpus key and
+     * overwrite each other's counterexample, and from 8.4 the name carries a
+     * line number that an edit above shifts, orphaning yesterday's entry.
+     * Neither throws — the corpus simply stops replaying the failure it exists
+     * to replay. Pest's `it()`/`test()` bodies are the common case.
+     *
+     * The name given here is used verbatim, and it is also the property's
+     * display name, so one string identifies it in the corpus, in the events
+     * and in the printed output.
+     */
+    public function id(string $id): self
+    {
+        $this->id = $id;
+        $this->name = $id;
+
+        return $this;
+    }
 
     /**
      * Number of successful checks to complete; discarded runs do not count.

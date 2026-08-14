@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Added `PropertyCheck::id()`: names the property, replacing the id derived
+  from the calling method. The string is used verbatim — as the
+  regression-corpus key, as the id on every event, and as the property's
+  display name. It exists for the case the derived id cannot serve: a
+  `forAll()` called from a closure, where PHP has no stable name to derive
+  from. On PHP 8.3 every closure of a class is `{closure}`, so two properties
+  in one file share a corpus key and overwrite each other's counterexample;
+  from 8.4 the name carries a line number, so an edit above the property
+  orphans yesterday's entry. Neither throws — the corpus simply stops
+  replaying. Pest's `it()`/`test()` bodies are the common source of both.
+
 ## 0.1.1 — 2026-08-10
 
 - Added support for PHPUnit 13 on PHP 8.4.1 or newer while preserving PHPUnit

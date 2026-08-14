@@ -96,6 +96,7 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 
 | Method | Meaning |
 |---|---|
+| `id(string)` | Names the property, replacing the id derived from the calling method. Keys the corpus and the events, and is the display name — required when `forAll()` runs inside a closure |
 | `runs(int)` | Successful checks to complete (default 100). Discarded runs do not count |
 | `seed(int)` | Pins the random phase for reproduction. Also disables corpus replay — the pinned run wins |
 | `maxShrinks(int)` | Cap on accepted shrink steps; `0` disables shrinking |
@@ -105,6 +106,31 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `examples(array)` | Fixed positional argument tuples run **before** the random phase; a failing example short-circuits, unshrunk |
 | `listeners(...)` | `PropertyListener` observers of the engine's lifecycle events |
 | `output($stdout, $stderr)` | Redirects the distribution report, discard warning and verbose trace (used by this package's own tests) |
+
+### Naming a property (`id()`)
+
+`id()` names the property:
+
+```php
+$this->forAll(['values' => Gen::arrayOf(Gen::int())])
+    ->id('sort::idempotent')
+    ->runs(300)
+    ->check(static function (array $values): void { /* … */ });
+```
+
+Left out, the name is derived from the calling method — which is right for a
+test method and wrong for a **closure**, because PHP has no stable name for
+one. On PHP 8.3 every closure of a class is `{closure}`, so two properties in
+one file share a corpus key and overwrite each other's recorded
+counterexample; from 8.4 the name is `{closure:/path/File.php:19}`, so
+inserting a line above the property orphans yesterday's entry. Nothing throws
+— the corpus just stops replaying the failure it exists to replay.
+
+So call `id()` whenever `forAll()` runs inside a closure rather than directly
+in a test method (Pest's `it()` and `test()` are the common case). The id keys
+the regression corpus and every event, and it also becomes the display name, so
+one string identifies the property in the corpus, in the events and in the
+printed output.
 
 ### How results map onto PHPUnit
 
