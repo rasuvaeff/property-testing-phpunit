@@ -32,10 +32,15 @@
         "friendsofphp/php-cs-fixer": "^3.95",
         "infection/infection": "^0.33 || ^0.34",
         "maglnet/composer-require-checker": "^4.17",
+        "predis/predis": "^2.2 || ^3.0",
         "rasuvaeff/rector-named-literals": "^1.0",
         "rector/rector": "^2.4",
         "roave/backward-compatibility-check": "^8.0",
         "vimeo/psalm": "^6.16"
+    },
+    "suggest": {
+        "ext-redis": "Required for PROPERTY_DB=redis://… — a regression corpus shared between CI and developers",
+        "predis/predis": "Required for PROPERTY_DB=redis://… when ext-redis is unavailable"
     },
     "autoload": {
         "psr-4": {
@@ -79,7 +84,7 @@
             "@rector",
             "@bc-check"
         ],
-        "require-checker": "composer-require-checker check composer.json",
+        "require-checker": "composer-require-checker check composer.json --config-file=composer-require-checker.json",
         "test": "phpunit",
         "test:coverage": "phpunit --coverage-clover=build/coverage.xml",
         "test:coverage:ci": "phpunit --coverage-clover=build/coverage.xml"

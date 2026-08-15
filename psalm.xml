@@ -41,4 +41,9 @@
             </errorLevel>
         </InternalMethod>
     </issueHandlers>
+    <!-- CorpusFromEnv types against \Redis; the bundled stub lets psalm analyze
+         it without ext-redis being installed. -->
+    <enableExtensions>
+        <extension name="redis"/>
+    </enableExtensions>
 </psalm>

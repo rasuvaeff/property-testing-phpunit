@@ -159,11 +159,24 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 | `PROPERTY_RUNS` | Positive integer that overrides every property's run count (dial runs up in CI) |
 | `PROPERTY_SEED` | Integer seed for any property without an explicit `seed()` (replay a whole suite). An explicit `seed()` still wins |
 | `PROPERTY_VERBOSE` | Any value except `''`/`'0'` logs every run's generated arguments and each accepted shrink step |
-| `PROPERTY_DB` | Directory path enabling the regression corpus. Unset means off, nothing is written |
+| `PROPERTY_DB` | Directory path enabling the regression corpus, or a `redis://host[:port][/key-prefix]` DSN for a corpus shared between CI and developers. Unset means off, nothing is written |
 | `PROPERTY_PHASES` | Comma-separated stage list (`examples,corpus,random,shrink`, case-insensitive) that overrides `phases()` — an unknown name throws rather than skipping a stage. `examples,corpus` is the fast pull-request gate |
 | `PROPERTY_DERANDOMIZE` | Any value except `''`/`'0'` derives every unset seed from the property id, making a whole suite reproducible without editing it |
 | `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins |
 | `PROPERTY_EDGE_CASES` | `mixin` or `none` (case-insensitive) — the numeric boundary bias for the whole suite, overriding `edgeCases()`. An unknown value throws |
+
+`PROPERTY_DB` takes either a directory or a Redis DSN:
+
+```bash
+PROPERTY_DB=/tmp/corpus                  vendor/bin/phpunit   # one machine
+PROPERTY_DB=redis://127.0.0.1:6379       vendor/bin/phpunit   # shared
+PROPERTY_DB=redis://redis:6379/suite-a:  vendor/bin/phpunit   # shared server, own prefix
+```
+
+A directory remembers a counterexample for whoever owns it — in CI, a machine
+deleted when the job ends. The Redis form is the same corpus, in the same
+document, shared. It needs `ext-redis` or `predis/predis`; neither installed is
+an error rather than a silent fall back to the filesystem.
 
 The corpus format is exactly the one `rasuvaeff/property-testing` 2.8 wrote —
 a corpus recorded under Testo (or under 2.x) replays here and vice versa. On
