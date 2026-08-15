@@ -7,8 +7,10 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\PhpUnit\CorpusFromEnv;
+use Rasuvaeff\PropertyTesting\PhpUnit\LazyPhpRedisCorpusClient;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\Runner\FilesystemCorpus;
+use Rasuvaeff\PropertyTesting\Runner\Redis\PredisCorpusClient;
 use Rasuvaeff\PropertyTesting\Runner\RedisCorpus;
 
 /**
@@ -52,6 +54,40 @@ final class CorpusFromEnvTest extends TestCase
 
         try {
             self::assertInstanceOf(FilesystemCorpus::class, CorpusFromEnv::resolve());
+        } finally {
+            $restore();
+        }
+    }
+
+    public function testResolvingADsnNeverOpensASocket(): void
+    {
+        // The reason the phpredis client is wrapped: CI installs ext-redis and
+        // runs no Redis, and an eager connect() made every job red.
+        $restore = Env::set('PROPERTY_DB', 'redis://127.0.0.1:6399/never-touched:');
+
+        try {
+            self::assertInstanceOf(RedisCorpus::class, CorpusFromEnv::resolve());
+        } finally {
+            $restore();
+        }
+    }
+
+    public function testExtRedisIsPreferredWhenItIsLoaded(): void
+    {
+        // The documented preference, asserted in whichever environment this
+        // runs: CI has the extension, the composer image does not.
+        $restore = Env::set('PROPERTY_DB', 'redis://127.0.0.1:6399');
+
+        try {
+            $corpus = CorpusFromEnv::resolve();
+            self::assertInstanceOf(RedisCorpus::class, $corpus);
+
+            $client = (new \ReflectionProperty($corpus, 'client'))->getValue($corpus);
+
+            self::assertInstanceOf(
+                extension_loaded('redis') ? LazyPhpRedisCorpusClient::class : PredisCorpusClient::class,
+                $client,
+            );
         } finally {
             $restore();
         }
