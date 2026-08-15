@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-08-15
 
 - `PROPERTY_DB` now also takes a `redis://host[:port][/key-prefix]` DSN, which
   builds core 0.3's `RedisCorpus`. Until now that class existed and no suite
