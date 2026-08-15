@@ -12,7 +12,6 @@ use Rasuvaeff\PropertyTesting\PropertyListener;
 use Rasuvaeff\PropertyTesting\Runner\CallableTrialExecutor;
 use Rasuvaeff\PropertyTesting\Runner\CoverageFailed;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
-use Rasuvaeff\PropertyTesting\Runner\FilesystemCorpus;
 use Rasuvaeff\PropertyTesting\Runner\GaveUp;
 use Rasuvaeff\PropertyTesting\Runner\Passed;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
@@ -354,7 +353,7 @@ final class PropertyCheck
             $definition,
             new CallableTrialExecutor($property),
             $listeners,
-            FilesystemCorpus::fromEnv(),
+            CorpusFromEnv::resolve(),
         );
 
         $statistics = match (true) {
