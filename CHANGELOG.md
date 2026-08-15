@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Added `PropertyCheck::edgeCases()` and `PROPERTY_EDGE_CASES` (`mixin` or
+  `none`), reaching core 0.3's switch for the numeric boundary bias. Turning it
+  off stops a property that cannot use `0`, `±1` or a range's ends from
+  spending one run in five on a value it discards. The variable overrides the
+  chain, like every other CI-facing knob, and an unknown value throws rather
+  than silently keeping the bias it was told to drop.
+- **Requires `rasuvaeff/property-testing-core` `^0.3`.**
+
 ## 0.2.0 — 2026-08-14
 
 - Added the 0.2 run knobs, as fluent setters and as environment variables:
