@@ -64,6 +64,7 @@ public function shrinkBudgetMs(int $ms): self;       // wall-clock budget for th
 public function phases(array $phases): self;         // list<Phase>: Examples, Corpus, Random, Shrink
 public function derandomize(bool $on = true): self;  // unset seed derived from the property id
 public function path(string $path): self;            // replay a recorded shrink descent; needs its seed
+public function edgeCases(EdgeCases $mode): self;    // Mixin (default) | None = no numeric boundary bias
 public function seed(int $seed): self;               // pin the random phase; disables corpus replay
 public function maxShrinks(int $maxShrinks): self;   // cap accepted shrink steps; 0 = no shrinking
 public function maxDiscards(int $maxDiscards): self; // discard budget; default runs * 10
@@ -112,6 +113,7 @@ final class SortPropertyTest extends TestCase
 | `PROPERTY_PHASES` | `examples,corpus,random,shrink` (comma-separated, case-insensitive) | Stages to run; OVERRIDES `phases()`; unknown name throws |
 | `PROPERTY_DERANDOMIZE` | anything but `''`/`'0'` | Unset seeds derived from the property id; `seed()`/`PROPERTY_SEED` still win |
 | `PROPERTY_PATH` | recorded `CounterExample::$path` | Replays that shrink descent; needs the seed of that run; explicit `path()` wins |
+| `PROPERTY_EDGE_CASES` | `mixin` \| `none` (case-insensitive) | Numeric boundary bias; OVERRIDES `edgeCases()`; unknown value throws |
 
 ### Classification output
 

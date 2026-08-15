@@ -11,6 +11,7 @@ use Rasuvaeff\PropertyTesting\PropertyId;
 use Rasuvaeff\PropertyTesting\PropertyListener;
 use Rasuvaeff\PropertyTesting\Runner\CallableTrialExecutor;
 use Rasuvaeff\PropertyTesting\Runner\CoverageFailed;
+use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
 use Rasuvaeff\PropertyTesting\Runner\FilesystemCorpus;
 use Rasuvaeff\PropertyTesting\Runner\GaveUp;
 use Rasuvaeff\PropertyTesting\Runner\Passed;
@@ -70,6 +71,7 @@ final class PropertyCheck
     private ?ShrinkMode $shrink = null;
     private ?int $shrinkBudgetMs = null;
     private ?string $path = null;
+    private ?EdgeCases $edgeCases = null;
     private ?bool $derandomize = null;
 
     /** @var ?list<Phase> */
@@ -235,6 +237,22 @@ final class PropertyCheck
     }
 
     /**
+     * Whether the numeric generators keep biasing toward their boundary values
+     * ({@see EdgeCases::Mixin}, the default) or generate uniformly
+     * ({@see EdgeCases::None}).
+     *
+     * Turn them off when the edges are what this property cannot use — a body
+     * discarding `0`, a range end that violates a precondition — so the
+     * discard budget stops paying for one run in five.
+     */
+    public function edgeCases(EdgeCases $edgeCases): self
+    {
+        $this->edgeCases = $edgeCases;
+
+        return $this;
+    }
+
+    /**
      * Replays the shrink descent of an earlier failure, as reported by
      * `CounterExample::$path`, instead of searching for it again. It needs the
      * seed of the run that produced it — the steps mean nothing against
@@ -318,6 +336,7 @@ final class PropertyCheck
                 phases: $this->envPhases() ?? $this->phases,
                 derandomize: $this->envDerandomize() ?? $this->derandomize ?? false,
                 path: $this->path ?? $this->envPath(),
+                edgeCases: $this->envEdgeCases() ?? $this->edgeCases ?? EdgeCases::Mixin,
             ),
             examples: $this->examples,
             replayRegressions: $this->seed === null,
@@ -461,6 +480,31 @@ final class PropertyCheck
         }
 
         return $phases;
+    }
+
+    /**
+     * `PROPERTY_EDGE_CASES` selects the numeric boundary bias for the whole
+     * suite: `mixin` (the default) or `none`, case-insensitive. It overrides
+     * the chain, like every other CI-facing knob, and an unknown value is an
+     * error rather than a silent fallback — a suite that quietly kept the bias
+     * it was told to drop would spend the discard budget it was trying to save.
+     */
+    private function envEdgeCases(): ?EdgeCases
+    {
+        $env = getenv('PROPERTY_EDGE_CASES');
+
+        if ($env === false || $env === '') {
+            return null;
+        }
+
+        return match (strtolower(trim($env))) {
+            'mixin' => EdgeCases::Mixin,
+            'none' => EdgeCases::None,
+            default => throw new \InvalidArgumentException(sprintf(
+                'PROPERTY_EDGE_CASES must be one of mixin, none, got "%s"',
+                trim($env),
+            )),
+        };
     }
 
     /**

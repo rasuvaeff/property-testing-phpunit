@@ -7,7 +7,7 @@
         "text": "php://stderr",
         "summary": "build/infection-summary.log"
     },
-    // 146 of 154 mutants are killed; the remaining eight are equivalent
+    // 160 of 168 mutants are killed; the remaining eight are equivalent
     // (report wording and ordering that no observable behaviour distinguishes),
     // so 100 is unreachable without ignores — which are forbidden here.
     "minMsi": 90,

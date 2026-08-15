@@ -72,6 +72,7 @@ final class Env
             'PROPERTY_PHASES' => null,
             'PROPERTY_DERANDOMIZE' => null,
             'PROPERTY_PATH' => null,
+            'PROPERTY_EDGE_CASES' => null,
         ]);
     }
 }

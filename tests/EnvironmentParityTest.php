@@ -18,6 +18,7 @@ use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\RegressionViolationException;
+use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
 
 /**
@@ -471,6 +472,84 @@ final class EnvironmentParityTest extends TestCase
         rewind($stderr);
 
         self::assertSame('', (string) stream_get_contents($stderr));
+    }
+
+    public function testEdgeCasesOffKeepsBoundaryValuesOutOfTheRun(): void
+    {
+        // The knob's whole purpose: a property that cannot use the edges would
+        // otherwise throw away one run in five.
+        self::assertSame(0, $this->edgesSeen(static fn(PropertyCheck $check): PropertyCheck => $check->edgeCases(EdgeCases::None)));
+    }
+
+    public function testByDefaultTheBoundaryValuesAreStillGenerated(): void
+    {
+        self::assertGreaterThan(10, $this->edgesSeen(static fn(PropertyCheck $check): PropertyCheck => $check));
+    }
+
+    public function testPropertyEdgeCasesOverridesTheChain(): void
+    {
+        putenv('PROPERTY_EDGE_CASES=none');
+
+        self::assertSame(0, $this->edgesSeen(static fn(PropertyCheck $check): PropertyCheck => $check->edgeCases(EdgeCases::Mixin)));
+    }
+
+    public function testPropertyEdgeCasesIgnoresSpacingAndCase(): void
+    {
+        putenv('PROPERTY_EDGE_CASES=  NONE  ');
+
+        self::assertSame(0, $this->edgesSeen(static fn(PropertyCheck $check): PropertyCheck => $check));
+    }
+
+    public function testPropertyEdgeCasesCanTurnThemBackOn(): void
+    {
+        putenv('PROPERTY_EDGE_CASES=mixin');
+
+        self::assertGreaterThan(10, $this->edgesSeen(static fn(PropertyCheck $check): PropertyCheck => $check->edgeCases(EdgeCases::None)));
+    }
+
+    public function testPropertyEdgeCasesRejectsAnUnknownValue(): void
+    {
+        // Spaces on purpose: the message quotes the trimmed value, so a
+        // reader sees what was compared rather than what was typed.
+        putenv('PROPERTY_EDGE_CASES=  sometimes  ');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('PROPERTY_EDGE_CASES must be one of mixin, none, got "sometimes"');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+    }
+
+    /**
+     * How many runs generated an in-range boundary value.
+     *
+     * @param \Closure(PropertyCheck): PropertyCheck $configure
+     */
+    private function edgesSeen(\Closure $configure): int
+    {
+        $listener = new RecordingListener();
+
+        $configure(
+            $this->forAll(['value' => Gen::intBetween(-1_000_000, 1_000_000)])
+                ->id('parity::edge-cases')
+                ->runs(200)
+                ->seed(5)
+                ->listeners($listener),
+        )->check(static function (int $value): void {
+            self::assertIsInt($value);
+        });
+
+        $edges = 0;
+
+        foreach ($listener->events as $event) {
+            if ($event instanceof RunStarted && in_array($event->arguments['value'] ?? null, [0, 1, -1, -1_000_000, 1_000_000], true)) {
+                ++$edges;
+            }
+        }
+
+        return $edges;
     }
 
     /**

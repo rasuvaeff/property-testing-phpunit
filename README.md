@@ -110,6 +110,7 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `phases(array)` | Stages to perform (`Phase::Examples`, `Corpus`, `Random`, `Shrink`) — a subset trades coverage for time on purpose |
 | `derandomize(bool)` | Derives an unset seed from the property id instead of drawing one; an explicit `seed()` still wins |
 | `path(string)` | Replays a recorded shrink descent instead of searching for it; needs the seed that produced it |
+| `edgeCases(EdgeCases)` | `None` turns off the numeric boundary bias — for a property the edges only cost runs |
 | `output($stdout, $stderr)` | Redirects the distribution report, discard warning and verbose trace (used by this package's own tests) |
 
 ### Naming a property (`id()`)
@@ -162,6 +163,7 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 | `PROPERTY_PHASES` | Comma-separated stage list (`examples,corpus,random,shrink`, case-insensitive) that overrides `phases()` — an unknown name throws rather than skipping a stage. `examples,corpus` is the fast pull-request gate |
 | `PROPERTY_DERANDOMIZE` | Any value except `''`/`'0'` derives every unset seed from the property id, making a whole suite reproducible without editing it |
 | `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins |
+| `PROPERTY_EDGE_CASES` | `mixin` or `none` (case-insensitive) — the numeric boundary bias for the whole suite, overriding `edgeCases()`. An unknown value throws |
 
 The corpus format is exactly the one `rasuvaeff/property-testing` 2.8 wrote —
 a corpus recorded under Testo (or under 2.x) replays here and vice versa. On
