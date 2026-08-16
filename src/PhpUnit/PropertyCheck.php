@@ -7,6 +7,7 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\ArbitraryInterface;
+use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\PropertyId;
 use Rasuvaeff\PropertyTesting\PropertyListener;
 use Rasuvaeff\PropertyTesting\Runner\CallableTrialExecutor;
@@ -72,6 +73,7 @@ final class PropertyCheck
     private ?string $path = null;
     private ?EdgeCases $edgeCases = null;
     private ?bool $derandomize = null;
+    private bool $auto = false;
 
     /** @var ?list<Phase> */
     private ?array $phases = null;
@@ -265,6 +267,27 @@ final class PropertyCheck
     }
 
     /**
+     * Derive a generator from the closure's signature for every parameter the
+     * {@see PropertyTesting::forAll()} map does not cover — the `@param` psalm
+     * type when the closure has a docblock (`int<1, 300>` beats a bare `int`),
+     * the native type otherwise, and an error naming the parameter for
+     * anything unreadable. The map becomes the overrides and may be partial —
+     * or empty: a fully-typed property needs no map at all.
+     *
+     * Strictly opt-in, never the default: a bare `int` or `float` derives its
+     * full native domain, and only the property's author knows whether that is
+     * the intended one. There is deliberately no `PROPERTY_AUTO` environment
+     * variable — the environment dials the suite, while this changes what one
+     * property's arguments mean.
+     */
+    public function auto(bool $auto = true): self
+    {
+        $this->auto = $auto;
+
+        return $this;
+    }
+
+    /**
      * Fixed positional argument tuples run before the random phase. A failing
      * example short-circuits and is reported unshrunk — it is already minimal.
      *
@@ -309,15 +332,16 @@ final class PropertyCheck
      */
     public function check(\Closure $property): void
     {
+        $reflection = new \ReflectionFunction($property);
         $parameterNames = array_map(
             static fn(\ReflectionParameter $parameter): string => $parameter->getName(),
-            (new \ReflectionFunction($property))->getParameters(),
+            $reflection->getParameters(),
         );
 
         $definition = new PropertyDefinition(
             id: $this->id,
             name: $this->name,
-            generators: $this->generators,
+            generators: $this->resolveGenerators($reflection, $parameterNames),
             parameterNames: $parameterNames,
             config: new PropertyConfig(
                 runs: $this->envRuns() ?? $this->runs ?? 100,
@@ -378,6 +402,40 @@ final class PropertyCheck
         }
 
         throw new AssertionFailedError($failure->getMessage(), 0, $failure);
+    }
+
+    /**
+     * The generators the property runs with: verbatim the {@see forAll()} map,
+     * or — under {@see auto()} — that map as overrides with every uncovered
+     * parameter derived from the closure's signature. The derivation errors are
+     * {@see Gen::forParameters()}'s own, naming the function and the parameter;
+     * a map key that is not a parameter is rejected here, because merge
+     * semantics would otherwise silently replace a typoed entry with a
+     * signature-derived generator.
+     *
+     * @param list<string> $parameterNames
+     *
+     * @return array<string, ArbitraryInterface>
+     */
+    private function resolveGenerators(\ReflectionFunction $property, array $parameterNames): array
+    {
+        if (!$this->auto) {
+            return $this->generators;
+        }
+
+        $parameters = array_flip($parameterNames);
+
+        foreach (array_keys($this->generators) as $name) {
+            if (!isset($parameters[$name])) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Property "%s": forAll() covers "%s", which is not a parameter of the property',
+                    $this->name,
+                    $name,
+                ));
+            }
+        }
+
+        return Gen::forParameters($property, $this->generators);
     }
 
     /**

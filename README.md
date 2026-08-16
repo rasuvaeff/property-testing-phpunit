@@ -111,7 +111,62 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `derandomize(bool)` | Derives an unset seed from the property id instead of drawing one; an explicit `seed()` still wins |
 | `path(string)` | Replays a recorded shrink descent instead of searching for it; needs the seed that produced it |
 | `edgeCases(EdgeCases)` | `None` turns off the numeric boundary bias — for a property the edges only cost runs |
+| `auto(bool = true)` | Derives generators from the closure's signature for every parameter the `forAll()` map does not cover; the map becomes partial overrides. Off by default, and stays off |
 | `output($stdout, $stderr)` | Redirects the distribution report, discard warning and verbose trace (used by this package's own tests) |
+
+### Auto-derived generators (`auto()`)
+
+When the closure's parameters are fully described by their types, the
+`forAll()` map can go away entirely: `auto()` derives a generator for every
+uncovered parameter from the closure's own signature via
+[`Gen::forParameters()`](https://github.com/rasuvaeff/property-testing-core) —
+the `@param` psalm type when the closure carries a docblock (`int<1, 300>`,
+`non-empty-string`, `list<T>`, `'a'|'b'`), the native type otherwise. A
+docblock over a closure is legal PHP, and reflection sees it in every natural
+placement:
+
+```php
+$this->forAll()
+    ->auto()
+    ->check(
+        /**
+         * @param int<1, 300> $base
+         * @param int<1, 86400> $cap
+         */
+        function (int $base, int $cap): void {
+            self::assertLessThanOrEqual(86_400, $cap);
+        },
+    );
+```
+
+The `forAll()` map becomes the **overrides** and may be partial — the escape
+hatch for domains no psalm type can express (a float range, a dependent pair
+built with `Gen::flatMap()`):
+
+```php
+$this->forAll(['multiplier' => Gen::floatBetween(1.0, 4.0)])
+    ->auto()
+    ->check(
+        /** @param int<1, 40> $attempt */
+        function (float $multiplier, int $attempt): void { /* … */ },
+    );
+```
+
+Rules worth knowing — verbatim the Testo adapter's (`#[Property(auto: true)]`):
+
+- **Strictly opt-in.** A bare `int` or `float` derives its full native domain,
+  and only the property's author knows whether that is the intended one.
+  Annotate or override anything narrower.
+- A type the deriver cannot read (a bare `array`, `mixed`, an untyped or
+  variadic parameter) fails with an error naming the function and the
+  parameter — never a silently widened guess.
+- With `auto()` a `forAll()` key that is not a parameter of the closure is an
+  error: merge semantics would otherwise silently replace a typoed entry with
+  a signature-derived generator.
+- A full map plus `auto()` is legal — auto derives nothing.
+- There is deliberately no `PROPERTY_AUTO` environment variable: the
+  environment dials the suite, while `auto()` changes what one property's
+  arguments mean.
 
 ### Naming a property (`id()`)
 

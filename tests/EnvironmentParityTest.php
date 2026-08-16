@@ -544,7 +544,7 @@ final class EnvironmentParityTest extends TestCase
         $edges = 0;
 
         foreach ($listener->events as $event) {
-            if ($event instanceof RunStarted && in_array($event->arguments['value'] ?? null, [0, 1, -1, -1_000_000, 1_000_000], true)) {
+            if ($event instanceof RunStarted && in_array($event->arguments['value'] ?? null, [0, 1, -1, -1_000_000, 1_000_000], strict: true)) {
                 ++$edges;
             }
         }

@@ -69,6 +69,24 @@ final class SortPropertyTest extends TestCase
             });
     }
 
+    public function testRepeatingAPadOnlyGrowsTheString(): void
+    {
+        // Auto-derived generators: no forAll() map at all — the closure's
+        // @param annotations are the whole specification.
+        $this->forAll()
+            ->auto()
+            ->runs(200)
+            ->check(
+                /**
+                 * @param non-empty-string $pad
+                 * @param int<1, 20> $times
+                 */
+                static function (string $pad, int $times): void {
+                    self::assertGreaterThanOrEqual(strlen($pad), strlen(str_repeat($pad, $times)));
+                },
+            );
+    }
+
     /**
      * @param list<int> $values
      * @return list<int>

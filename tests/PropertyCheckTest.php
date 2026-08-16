@@ -378,6 +378,109 @@ final class PropertyCheckTest extends TestCase
         self::assertStringContainsString('consider narrowing the generators', $warning);
     }
 
+    public function testAutoDerivesEveryGeneratorFromTheClosureSignature(): void
+    {
+        // No forAll() map at all: the docblock annotations and the native bool
+        // are the whole specification.
+        $before = $this->numberOfAssertionsPerformed();
+
+        $this->forAll()
+            ->auto()
+            ->runs(30)
+            ->seed(1)
+            ->check(
+                /**
+                 * @param int<1, 300> $base
+                 * @param int<1, 86400> $cap
+                 */
+                static function (int $base, int $cap, bool $flag): void {
+                    self::assertGreaterThanOrEqual(1, $base);
+                    self::assertLessThanOrEqual(300, $base);
+                    self::assertGreaterThanOrEqual(1, $cap);
+                    self::assertLessThanOrEqual(86_400, $cap);
+                    self::assertIsBool($flag);
+                },
+            );
+
+        self::assertGreaterThan($before, $this->numberOfAssertionsPerformed());
+    }
+
+    public function testAutoTreatsTheForAllMapAsPartialOverrides(): void
+    {
+        // The map covers the type-inexpressible float range; the annotated int
+        // is derived from the closure's signature.
+        $this->forAll(['multiplier' => Gen::floatBetween(1.0, 4.0)])
+            ->auto()
+            ->runs(30)
+            ->seed(1)
+            ->check(
+                /** @param int<1, 40> $attempt */
+                static function (float $multiplier, int $attempt): void {
+                    self::assertGreaterThanOrEqual(1.0, $multiplier);
+                    self::assertLessThanOrEqual(4.0, $multiplier);
+                    self::assertGreaterThanOrEqual(1, $attempt);
+                    self::assertLessThanOrEqual(40, $attempt);
+                },
+            );
+    }
+
+    public function testAutoWithAFullMapDerivesNothing(): void
+    {
+        $this->forAll(['x' => Gen::constant(7)])
+            ->auto()
+            ->runs(5)
+            ->seed(1)
+            ->check(static function (int $x): void {
+                self::assertSame(7, $x);
+            });
+    }
+
+    public function testAutoRejectsATypeItCannotReadNamingFunctionAndParameter(): void
+    {
+        try {
+            $this->forAll()
+                ->auto()
+                ->check(static function (array $anything): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertStringContainsString('parameter $anything is typed array', $exception->getMessage());
+            self::assertStringContainsString('pass an override', $exception->getMessage());
+        }
+    }
+
+    public function testAutoRejectsAMapKeyThatIsNotAParameter(): void
+    {
+        // Merge semantics would silently replace a typoed map entry with a
+        // signature-derived generator; an unknown key must be an error instead.
+        try {
+            $this->forAll(['y' => Gen::constant(7)])
+                ->auto()
+                ->check(static function (int $x): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertStringContainsString('forAll() covers "y"', $exception->getMessage());
+            self::assertStringContainsString('not a parameter', $exception->getMessage());
+        }
+    }
+
+    public function testWithoutAutoTheForAllMapIsUsedVerbatim(): void
+    {
+        // auto stays opt-in: no derivation happens unless auto() was called,
+        // so a missing generator surfaces exactly as before.
+        try {
+            $this->forAll(['x' => Gen::constant(7)])
+                ->runs(1)
+                ->seed(1)
+                ->check(static function (int $x, int $missing): void {});
+
+            self::fail('Expected a failure about the missing generator');
+        } catch (\Throwable $failure) {
+            self::assertStringContainsString('missing', $failure->getMessage());
+        }
+    }
+
     private function falsifiedOriginal(): mixed
     {
         try {
