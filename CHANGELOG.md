@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-08-16
 
 - Added fluent `auto()`: a generator is derived from the property closure's
   own signature for every parameter the `forAll()` map does not cover, via
