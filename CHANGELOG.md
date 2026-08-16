@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Added fluent `auto()`: a generator is derived from the property closure's
+  own signature for every parameter the `forAll()` map does not cover, via
+  core 0.4's `Gen::forParameters()` (the `@param` psalm type from the
+  closure's docblock over the native type; a type it cannot read throws
+  naming the function and the parameter). The map becomes the overrides and
+  may be partial; `forAll()` now defaults to `[]`, so a fully-typed closure
+  needs no map at all; with `auto()` a map key that is not a parameter of the
+  closure is an error. Strictly opt-in — it will never become the default —
+  and deliberately without a `PROPERTY_AUTO` environment variable. Without
+  `auto()` behavior is unchanged. Parity with the Testo adapter's
+  `#[Property(auto: true)]`.
+- Requires `rasuvaeff/property-testing-core` `^0.4`.
+
 ## 0.4.0 — 2026-08-15
 
 - `PROPERTY_DB` now also takes a `redis://host[:port][/key-prefix]` DSN, which

@@ -72,9 +72,19 @@ public function timeoutMs(int $timeoutMs): self;     // per-run wall-clock deadl
 public function budgetMs(int $budgetMs): self;       // whole-phase wall-clock budget
 public function examples(array $examples): self;     // list<list<mixed>> positional tuples, run first, never shrunk
 public function listeners(PropertyListener ...$listeners): self; // engine event observers
+public function auto(bool $auto = true): self;       // derive missing generators from the closure signature; forAll() map = partial overrides
 public function output($stdout, $stderr): self;      // redirect reports/trace streams (for tests)
 public function check(\Closure $property): void;     // run the property
 ```
+
+Auto-derivation (`auto()`, requires core ^0.4): every parameter the forAll()
+map does not cover is derived from the closure's signature via
+Gen::forParameters — the `@param` psalm type from the closure's docblock wins
+over the native type; unreadable types (bare array, mixed, untyped, variadic)
+throw naming the function and parameter. forAll() takes a `[]` default, so a
+fully-typed closure needs no map. With auto a map key that is not a parameter
+is an error. Strictly opt-in, never the default (bare int/float derive their
+full native domain). No PROPERTY_AUTO env variable, deliberately.
 
 ### Example
 

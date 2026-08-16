@@ -31,9 +31,11 @@ trait PropertyTesting
      * a closure (see {@see \Rasuvaeff\PropertyTesting\PropertyId}).
      *
      * @param array<string, ArbitraryInterface> $generators One generator per
-     *   property-body parameter, keyed by parameter name.
+     *   property-body parameter, keyed by parameter name. May be omitted (or
+     *   partial) when the chain continues with {@see PropertyCheck::auto()} —
+     *   uncovered parameters are then derived from the closure's signature.
      */
-    final protected function forAll(array $generators): PropertyCheck
+    final protected function forAll(array $generators = []): PropertyCheck
     {
         $frame = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1];
         $method = $frame['function'];
