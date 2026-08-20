@@ -10,6 +10,9 @@
 - `PROPERTY_DB` with credentials in its userinfo (`redis://user:pass@host`) is
   rejected instead of silently dropped — `parse_url` would discard them and the
   connection would go without AUTH. The error never echoes the DSN.
+- The resolved corpus is memoized per `PROPERTY_DB` value, so a suite sharing a
+  Redis corpus builds one client (and opens one connection) rather than one per
+  property. Mirrors the Testo adapter.
 
 ## 0.5.1 — 2026-08-20
 
