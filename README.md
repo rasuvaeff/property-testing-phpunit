@@ -233,7 +233,9 @@ deleted when the job ends. The Redis form is the same corpus, in the same
 document, shared. It needs `ext-redis` or `predis/predis`; neither installed is
 an error rather than a silent fall back to the filesystem. A `PROPERTY_DB` with
 any other scheme — a `rediss://` typo, another backend — is likewise an error,
-never a directory named after the scheme.
+never a directory named after the scheme. Credentials in the DSN
+(`redis://user:pass@host`) are rejected rather than silently dropped; configure
+Redis AUTH out of band.
 
 The corpus format is exactly the one `rasuvaeff/property-testing` 2.8 wrote —
 a corpus recorded under Testo (or under 2.x) replays here and vice versa. On

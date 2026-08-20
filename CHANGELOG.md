@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.2 — 2026-08-20
+
+- `forAll()` called from a helper (not directly in the test method) now warns
+  on stderr, the way a closure-derived id already did. Its id names the helper,
+  so every test using that helper shares one corpus entry and overwrites the
+  others' counterexample — a stable-looking id that is silently wrong. Pin it
+  with `->id()` to silence the warning.
+- `PROPERTY_DB` with credentials in its userinfo (`redis://user:pass@host`) is
+  rejected instead of silently dropped — `parse_url` would discard them and the
+  connection would go without AUTH. The error never echoes the DSN.
+- The resolved corpus is memoized per `PROPERTY_DB` value, so a suite sharing a
+  Redis corpus builds one client (and opens one connection) rather than one per
+  property. Mirrors the Testo adapter.
+
 ## 0.5.1 — 2026-08-20
 
 - `PROPERTY_DB` with a non-`redis` URI scheme is now a configuration error
