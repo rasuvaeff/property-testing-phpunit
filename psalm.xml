@@ -38,6 +38,14 @@
             <errorLevel type="suppress">
                 <referencedMethod name="PHPUnit\Framework\TestCase::addToAssertionCount"/>
                 <referencedMethod name="PHPUnit\Framework\AssertionFailedError::__construct"/>
+                <!--
+                    TestCase::name() is the running test method's name, used to
+                    tell a direct forAll() call (id derived from the test method)
+                    from an indirect one (derived from a helper, a colliding
+                    corpus key). Public and stable across PHPUnit 11-13, but
+                    @internal by policy like the rest of the surface.
+                -->
+                <referencedMethod name="PHPUnit\Framework\TestCase::name"/>
             </errorLevel>
         </InternalMethod>
     </issueHandlers>

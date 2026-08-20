@@ -474,6 +474,72 @@ final class EnvironmentParityTest extends TestCase
         self::assertSame('', (string) stream_get_contents($stderr));
     }
 
+    public function testAHelperDerivedIdIsReportedOnStderr(): void
+    {
+        $stderr = fopen('php://memory', 'w+');
+        self::assertIsResource($stderr);
+
+        // forAll() is called inside checkViaHelper(), so the derived id names
+        // the helper, not this test method — every test using the helper would
+        // share one corpus entry.
+        $this->checkViaHelper($stderr);
+
+        rewind($stderr);
+        $warning = (string) stream_get_contents($stderr);
+
+        self::assertMatchesRegularExpression(
+            '/^Property id "[^"]*::checkViaHelper" was derived from a helper, not the test method that ran, .*->id\(\)\n$/s',
+            $warning,
+        );
+    }
+
+    public function testAHelperDerivedIdIsSilencedByAnExplicitId(): void
+    {
+        $stderr = fopen('php://memory', 'w+');
+        self::assertIsResource($stderr);
+
+        $this->checkViaHelper($stderr, 'pinned::property');
+
+        rewind($stderr);
+
+        self::assertSame('', (string) stream_get_contents($stderr));
+    }
+
+    public function testADirectCallDerivesAStableIdWithoutWarning(): void
+    {
+        $stderr = fopen('php://memory', 'w+');
+        self::assertIsResource($stderr);
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(3)
+            ->output(STDOUT, $stderr)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+
+        rewind($stderr);
+
+        self::assertSame('', (string) stream_get_contents($stderr));
+    }
+
+    /**
+     * @param resource $stderr
+     */
+    private function checkViaHelper($stderr, ?string $id = null): void
+    {
+        $check = $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(3)
+            ->output(STDOUT, $stderr);
+
+        if ($id !== null) {
+            $check->id($id);
+        }
+
+        $check->check(static function (int $value): void {
+            self::assertGreaterThanOrEqual(0, $value);
+        });
+    }
+
     public function testEdgeCasesOffKeepsBoundaryValuesOutOfTheRun(): void
     {
         // The knob's whole purpose: a property that cannot use the edges would
@@ -626,9 +692,10 @@ final class EnvironmentParityTest extends TestCase
         // practically impossible, so falsification is certain either way.
         $check = $this->forAll(['value' => Gen::intBetween(0, 10_000)])->runs(100);
 
-        if ($id !== null) {
-            $check->id($id);
-        }
+        // Pin the id: forAll() here is one level down from the test method, so
+        // its derived id would be flagged as helper-derived. Default to exactly
+        // what it would have derived, so the corpus key is unchanged.
+        $check->id($id ?? self::class . '::runFalsifiableProperty');
 
         if ($listener instanceof RecordingListener) {
             $check->listeners($listener);

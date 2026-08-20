@@ -57,6 +57,29 @@ final class RedisDsnTest extends TestCase
         }
     }
 
+    #[DataProvider('credentialledProvider')]
+    public function testADsnWithCredentialsIsRejectedWithoutEchoingThePassword(string $dsn): void
+    {
+        try {
+            RedisDsn::parse($dsn);
+
+            self::fail('expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $e) {
+            self::assertStringContainsString('credentials', $e->getMessage());
+            self::assertStringNotContainsString('s3cret', $e->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function credentialledProvider(): iterable
+    {
+        yield 'user and password' => ['redis://user:s3cret@redis:6379'];
+        yield 'password only' => ['redis://:s3cret@redis:6379'];
+        yield 'user only' => ['redis://user@redis:6379'];
+    }
+
     #[DataProvider('malformedProvider')]
     public function testAMalformedDsnIsAConfigurationError(string $dsn): void
     {

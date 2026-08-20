@@ -45,6 +45,10 @@ trait PropertyTesting
             id: static::class . '::' . $method,
             name: $method,
             generators: $generators,
+            // Derived from something other than the running test method — a
+            // helper or a closure — so the id is shared across call sites and
+            // collides in the corpus. PropertyCheck warns unless id() pins it.
+            idDerivedIndirectly: $method !== $this->name(),
         );
     }
 }

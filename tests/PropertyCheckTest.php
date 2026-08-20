@@ -485,6 +485,8 @@ final class PropertyCheckTest extends TestCase
     {
         try {
             $this->forAll(['value' => Gen::intBetween(0, 100_000)])
+                // Pinned: forAll() is one level down from the test method here.
+                ->id(self::class . '::falsifiedOriginal')
                 ->runs(100)
                 ->seed(2026)
                 ->check(static function (int $value): void {

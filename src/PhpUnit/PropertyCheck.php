@@ -98,6 +98,7 @@ final class PropertyCheck
         private string $id,
         private string $name,
         private readonly array $generators,
+        private bool $idDerivedIndirectly = false,
     ) {}
 
     /**
@@ -120,6 +121,9 @@ final class PropertyCheck
     {
         $this->id = $id;
         $this->name = $id;
+        // Pinned explicitly: the derivation no longer matters, so drop the
+        // indirect-derivation warning.
+        $this->idDerivedIndirectly = false;
 
         return $this;
     }
@@ -475,13 +479,32 @@ final class PropertyCheck
      */
     private function warnOnUnstableId(): void
     {
-        $warning = PropertyId::unstableWarning($this->id);
+        $warning = PropertyId::unstableWarning($this->id) ?? $this->indirectIdWarning();
 
         if ($warning === null) {
             return;
         }
 
         fwrite($this->stderr, $warning . "\n");
+    }
+
+    /**
+     * `forAll()` was called from a helper (or otherwise not the running test
+     * method), so its derived id names the helper, not the test — every caller
+     * of that helper shares one corpus entry and overwrites the others'
+     * counterexample. `PropertyId::unstableWarning()` misses this because the id
+     * is a stable-looking `Class::method`, just the wrong method.
+     */
+    private function indirectIdWarning(): ?string
+    {
+        if (!$this->idDerivedIndirectly) {
+            return null;
+        }
+
+        return sprintf(
+            'Property id "%s" was derived from a helper, not the test method that ran, so every call site shares one corpus entry: call forAll() directly in the test method or pass an explicit property id with ->id()',
+            $this->id,
+        );
     }
 
     private function warnOnExcessiveSkips(RunStatistics $statistics): void
