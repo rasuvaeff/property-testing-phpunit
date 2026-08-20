@@ -231,7 +231,9 @@ PROPERTY_DB=redis://redis:6379/suite-a:  vendor/bin/phpunit   # shared server, o
 A directory remembers a counterexample for whoever owns it — in CI, a machine
 deleted when the job ends. The Redis form is the same corpus, in the same
 document, shared. It needs `ext-redis` or `predis/predis`; neither installed is
-an error rather than a silent fall back to the filesystem.
+an error rather than a silent fall back to the filesystem. A `PROPERTY_DB` with
+any other scheme — a `rediss://` typo, another backend — is likewise an error,
+never a directory named after the scheme.
 
 The corpus format is exactly the one `rasuvaeff/property-testing` 2.8 wrote —
 a corpus recorded under Testo (or under 2.x) replays here and vice versa. On
