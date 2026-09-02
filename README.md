@@ -31,7 +31,7 @@ read — inside an ordinary PHPUnit `TestCase`.
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.1`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.5`
 
 PHPUnit 13 requires PHP 8.4.1 or newer. On PHP 8.3, Composer resolves a
 compatible PHPUnit 11 or 12 release.
@@ -204,6 +204,18 @@ printed output.
   `RegressionViolationException`, …).
 - `Assume::that()` is a **discarded run inside the property**, retried by the
   engine — never a skipped PHPUnit test.
+- `markTestSkipped()` / `markTestIncomplete()` inside the body **skip that
+  run** (a discard); when every run skipped, the skip is rethrown and PHPUnit
+  reports the test as skipped or incomplete. Partly skipped runs count against
+  `maxDiscards`.
+- `expectException()` does not see the body's exception: the engine catches
+  it as the run's failure. Assert on exceptions inside the body instead.
+- `setUp()` runs once per test, not per generated input — a property is one
+  test method with one `check()`.
+- With a **data provider**, the corpus id carries the data set name
+  (`Class::method with data set "large"`), so the sets do not replay — and
+  prune — each other's regressions. The unstable-id warning is printed only
+  when a corpus is in use, once per id.
 
 ### Environment overrides
 
@@ -214,19 +226,27 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 | `PROPERTY_RUNS` | Positive integer that overrides every property's run count (dial runs up in CI) |
 | `PROPERTY_SEED` | Integer seed for any property without an explicit `seed()` (replay a whole suite). An explicit `seed()` still wins |
 | `PROPERTY_VERBOSE` | Any value except `''`/`'0'` logs every run's generated arguments and each accepted shrink step |
-| `PROPERTY_DB` | Directory path enabling the regression corpus, or a `redis://host[:port][/key-prefix]` DSN for a corpus shared between CI and developers. Unset means off, nothing is written |
+| `PROPERTY_DB` | Directory path enabling the regression corpus, or a `redis://host[:port][/db][?prefix=key-prefix]` DSN (`rediss://` for TLS) for a corpus shared between CI and developers. Unset means off, nothing is written |
 | `PROPERTY_PHASES` | Comma-separated stage list (`examples,corpus,random,shrink`, case-insensitive) that overrides `phases()` — an unknown name throws rather than skipping a stage. `examples,corpus` is the fast pull-request gate |
 | `PROPERTY_DERANDOMIZE` | Any value except `''`/`'0'` derives every unset seed from the property id, making a whole suite reproducible without editing it |
-| `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins |
+| `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins. It describes one failure, so run it with `--filter` on that one test — every other property would report the path as stale |
 | `PROPERTY_EDGE_CASES` | `mixin` or `none` (case-insensitive) — the numeric boundary bias for the whole suite, overriding `edgeCases()`. An unknown value throws |
 
 `PROPERTY_DB` takes either a directory or a Redis DSN:
 
 ```bash
-PROPERTY_DB=/tmp/corpus                  vendor/bin/phpunit   # one machine
-PROPERTY_DB=redis://127.0.0.1:6379       vendor/bin/phpunit   # shared
-PROPERTY_DB=redis://redis:6379/suite-a:  vendor/bin/phpunit   # shared server, own prefix
+PROPERTY_DB=/tmp/corpus                           vendor/bin/phpunit   # one machine
+PROPERTY_DB=redis://127.0.0.1:6379                vendor/bin/phpunit   # shared
+PROPERTY_DB=redis://redis:6379/2?prefix=suite-a:  vendor/bin/phpunit   # shared server, database 2, own prefix
+PROPERTY_DB=rediss://redis.example.com            vendor/bin/phpunit   # TLS
 ```
+
+The DSN has the shape everything else gives it (the IANA registration, predis,
+Symfony): the path is the database index, the key prefix is the `prefix`
+query parameter, `rediss://` is TLS. The pre-0.6 form with the prefix in the
+path (`redis://host/suite-a:`) is refused with the new spelling in the
+message. The value is parsed by the engine's `CorpusFactory`, shared with the
+Testo adapter.
 
 A directory remembers a counterexample for whoever owns it — in CI, a machine
 deleted when the job ends. The Redis form is the same corpus, in the same
@@ -279,7 +299,11 @@ Everything there is usable from a `check()` closure as-is.
 |---|---|
 | `Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting` | The trait a `TestCase` mixes in; `forAll()` is its single entry point |
 | `Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck` | The fluent builder: resolves the chain and the environment into a core `PropertyDefinition`, runs the engine, maps the structured result onto PHPUnit |
-| `Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener` | `PROPERTY_VERBOSE` output as an exception-hardened engine listener (internal) |
+
+`VerboseListener`, `PhpUnitTrialExecutor`, the `PropertyCheck` constructor and
+its `output()` seam are `@internal`. The environment variables and the
+`PROPERTY_DB` DSN are parsed by the engine (`EnvironmentOverrides`,
+`CorpusFactory`), so they mean the same thing under the Testo adapter.
 
 ## Security
 

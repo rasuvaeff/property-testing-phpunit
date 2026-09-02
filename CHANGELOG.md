@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- Requires `rasuvaeff/property-testing-core` `^0.5`. The corpus resolution
+  and the `PROPERTY_*` parsing now come from the engine (`CorpusFactory`,
+  `EnvironmentOverrides`); the adapter's own `CorpusFromEnv`, `RedisDsn` and
+  `LazyPhpRedisCorpusClient` (all `@internal`) are gone. `PROPERTY_RUNS` /
+  `PROPERTY_SEED` past the integer range are refused instead of saturating.
+- The `PROPERTY_DB` Redis DSN has the IANA shape:
+  `redis://host[:port][/db][?prefix=key-prefix]`, `rediss://` for TLS. The
+  path is the database index; the pre-0.6 form with the key prefix in the
+  path (`redis://host/suite-a:`) is refused with the new spelling in the
+  message.
+- `markTestSkipped()` / `markTestIncomplete()` inside the body skip that run
+  instead of falsifying the property and shrinking toward the smallest input
+  that still skips; when every run skipped, the skip is rethrown and PHPUnit
+  reports the test as skipped or incomplete.
+- With a data provider the corpus id carries the data set name
+  (`Class::method with data set "large"`), so one set's replay no longer
+  prunes another set's regression.
+- The unstable-id warning is printed only when a corpus is in use, and once
+  per id per process — not on every `check()` of every closure-derived test
+  under Pest.
+- `PropertyCheck::__construct()` and `output()` are `@internal`;
+  `forAll()` is the entry point.
+
 ## 0.5.2 — 2026-08-20
 
 - `forAll()` called from a helper (not directly in the test method) now warns

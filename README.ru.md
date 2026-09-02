@@ -31,7 +31,7 @@ shrink до минимального контрпримера, который р
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.1`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.5`
 
 PHPUnit 13 требует PHP 8.4.1 или новее. На PHP 8.3 Composer выбирает
 совместимый релиз PHPUnit 11 или 12.
@@ -203,6 +203,18 @@ $this->forAll(['values' => Gen::arrayOf(Gen::int())])
   `RegressionViolationException`, …).
 - `Assume::that()` — это **discard прогона внутри property**, движок повторяет
   попытку; PHPUnit-тест никогда не помечается skipped.
+- `markTestSkipped()` / `markTestIncomplete()` внутри тела **пропускают этот
+  прогон** (discard); если пропущены все прогоны, исключение пробрасывается, и
+  PHPUnit помечает тест skipped/incomplete. Частично пропущенные прогоны
+  учитываются в `maxDiscards`.
+- `expectException()` не видит исключение тела: движок ловит его как падение
+  прогона. Проверяйте исключения внутри тела.
+- `setUp()` выполняется один раз на тест, а не на каждый вход — property это
+  один тестовый метод с одним `check()`.
+- С **data provider** id корпуса несёт имя набора (`Class::method with data
+  set "large"`), чтобы наборы не воспроизводили — и не удаляли — регрессии
+  друг друга. Предупреждение о нестабильном id печатается только при
+  включённом корпусе, один раз на id.
 
 ### Переменные окружения
 
@@ -213,19 +225,26 @@ $this->forAll(['values' => Gen::arrayOf(Gen::int())])
 | `PROPERTY_RUNS` | Положительное целое, переопределяет число прогонов каждой property (поднять runs в CI) |
 | `PROPERTY_SEED` | Целочисленный seed для property без явного `seed()` (реплей всего suite). Явный `seed()` важнее |
 | `PROPERTY_VERBOSE` | Любое значение кроме `''`/`'0'` логирует аргументы каждого прогона и каждый принятый shrink-шаг |
-| `PROPERTY_DB` | Путь к каталогу, включающий регрессионный корпус, либо DSN `redis://host[:port][/key-prefix]` для корпуса, общего между CI и разработчиками. Не задан — выключен, ничего не пишется |
+| `PROPERTY_DB` | Путь к каталогу, включающий регрессионный корпус, либо DSN `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` для TLS) для корпуса, общего между CI и разработчиками. Не задан — выключен, ничего не пишется |
 | `PROPERTY_PHASES` | Список стадий через запятую (`examples,corpus,random,shrink`, регистр не важен), перекрывающий `phases()`; неизвестное имя — исключение, а не пропуск стадии. `examples,corpus` — быстрый гейт для pull request |
 | `PROPERTY_DERANDOMIZE` | Любое значение, кроме `''`/`'0'`, выводит каждый незаданный seed из id property: весь сьют становится воспроизводимым без правки кода |
-| `PROPERTY_PATH` | Записанный спуск shrink (`CounterExample::$path`) воспроизводится вместо повторного поиска. Нужен seed того прогона; явный `path()` побеждает |
+| `PROPERTY_PATH` | Записанный спуск shrink (`CounterExample::$path`) воспроизводится вместо повторного поиска. Нужен seed того прогона; явный `path()` побеждает. Он описывает одно падение, поэтому запускайте с `--filter` на этот один тест — любое другое property сообщит, что путь устарел |
 | `PROPERTY_EDGE_CASES` | `mixin` или `none` (регистр не важен) — граничное смещение для всего сьюта, перекрывает `edgeCases()`. Неизвестное значение — исключение |
 
 `PROPERTY_DB` принимает либо каталог, либо Redis-DSN:
 
 ```bash
-PROPERTY_DB=/tmp/corpus                  vendor/bin/phpunit   # одна машина
-PROPERTY_DB=redis://127.0.0.1:6379       vendor/bin/phpunit   # общий
-PROPERTY_DB=redis://redis:6379/suite-a:  vendor/bin/phpunit   # общий сервер, свой префикс
+PROPERTY_DB=/tmp/corpus                           vendor/bin/phpunit   # одна машина
+PROPERTY_DB=redis://127.0.0.1:6379                vendor/bin/phpunit   # общий
+PROPERTY_DB=redis://redis:6379/2?prefix=suite-a:  vendor/bin/phpunit   # общий сервер, база 2, свой префикс
+PROPERTY_DB=rediss://redis.example.com            vendor/bin/phpunit   # TLS
 ```
+
+Форма DSN — та же, что у всех остальных (регистрация IANA, predis, Symfony):
+путь — индекс базы, префикс ключей — query-параметр `prefix`, `rediss://` —
+TLS. Форма до 0.6 с префиксом в пути (`redis://host/suite-a:`) отклоняется с
+подсказкой нового написания. Значение разбирает `CorpusFactory` движка,
+общий с Testo-адаптером.
 
 Каталог помнит контрпример для того, кто им владеет, — в CI это машина,
 которую удаляют вместе с job'ом. Redis-форма — тот же корпус в том же
@@ -278,7 +297,11 @@ Property, отбрасывающая больше 90% попыток (через
 |---|---|
 | `Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting` | Трейт, который подмешивается в `TestCase`; единственная точка входа — `forAll()` |
 | `Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck` | Fluent-строитель: резолвит цепочку и окружение в core `PropertyDefinition`, запускает движок, мапит структурный результат на PHPUnit |
-| `Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener` | Вывод `PROPERTY_VERBOSE` как exception-hardened слушатель движка (internal) |
+
+`VerboseListener`, `PhpUnitTrialExecutor`, конструктор `PropertyCheck` и его
+seam `output()` — `@internal`. Переменные окружения и DSN `PROPERTY_DB`
+разбирает движок (`EnvironmentOverrides`, `CorpusFactory`), поэтому под
+Testo-адаптером они значат то же самое.
 
 ## Безопасность
 

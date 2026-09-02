@@ -40,9 +40,15 @@ trait PropertyTesting
         $frame = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1];
         $method = $frame['function'];
 
+        // A data provider runs the method once per data set, and each set may
+        // build a different property: the corpus id carries the set's name so
+        // the sets do not replay — and prune — each other's regressions.
+        $dataName = $this->dataName();
+        $id = static::class . '::' . $method . ($dataName === '' ? '' : sprintf(' with data set "%s"', (string) $dataName));
+
         return new PropertyCheck(
             testCase: $this,
-            id: static::class . '::' . $method,
+            id: $id,
             name: $method,
             generators: $generators,
             // Derived from something other than the running test method — a
