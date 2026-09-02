@@ -7,6 +7,9 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\IncompleteTestError;
+use PHPUnit\Framework\SkippedWithMessageException;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\Assume;
 use Rasuvaeff\PropertyTesting\Classify;
@@ -54,6 +57,72 @@ final class PropertyCheckTest extends TestCase
             });
 
         self::assertGreaterThan($before, $this->numberOfAssertionsPerformed());
+    }
+
+    public function testAPropertyWhoseEveryRunIsSkippedIsASkippedTest(): void
+    {
+        // markTestSkipped() inside the body used to be caught as a failure
+        // and shrunk toward the smallest input that still "fails".
+        $this->expectException(SkippedWithMessageException::class);
+        $this->expectExceptionMessage('no redis here');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(5)
+            ->check(static function (int $value): void {
+                self::markTestSkipped('no redis here');
+            });
+    }
+
+    public function testAPropertyWhoseEveryRunIsIncompleteIsAnIncompleteTest(): void
+    {
+        $this->expectException(IncompleteTestError::class);
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(5)
+            ->check(static function (int $value): void {
+                self::markTestIncomplete('not yet');
+            });
+    }
+
+    public function testAPartlySkippedPropertyDiscardsTheSkippedRuns(): void
+    {
+        // Skipped runs are discards: with runs 2 and maxDiscards 2 the budget
+        // is exhausted by the skips before two checks are made.
+        $calls = 0;
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(2)
+                ->maxDiscards(2)
+                ->check(static function (int $value) use (&$calls): void {
+                    if (++$calls !== 2) {
+                        self::markTestSkipped('most runs');
+                    }
+                });
+
+            self::fail('expected the discard budget to be exhausted');
+        } catch (AssertionFailedError $e) {
+            self::assertInstanceOf(GaveUpException::class, $e->getPrevious());
+        }
+    }
+
+    #[DataProvider('dataSets')]
+    public function testTheCorpusIdCarriesTheDataSetName(int $upper): void
+    {
+        // Each data set builds its own property; without the set's name in
+        // the id, one set's replay would prune the other set's regression.
+        $check = $this->forAll(['value' => Gen::intBetween(0, $upper)]);
+
+        self::assertSame(self::class . '::testTheCorpusIdCarriesTheDataSetName with data set "' . $this->dataName() . '"', $check->currentId());
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function dataSets(): iterable
+    {
+        yield 'small' => [1];
+        yield 'large' => [1_000];
     }
 
     public function testFalsifiedPropertyBecomesAnAssertionFailureWithTheEngineMessage(): void
@@ -476,8 +545,10 @@ final class PropertyCheckTest extends TestCase
                 ->check(static function (int $x, int $missing): void {});
 
             self::fail('Expected a failure about the missing generator');
-        } catch (\Throwable $failure) {
-            self::assertStringContainsString('missing', $failure->getMessage());
+        } catch (\InvalidArgumentException $failure) {
+            // The engine's own refusal for a map that does not cover a
+            // parameter — not a derivation error, which auto would produce.
+            self::assertSame('No generator for parameter "missing"', $failure->getMessage());
         }
     }
 

@@ -425,22 +425,30 @@ final class EnvironmentParityTest extends TestCase
         }
     }
 
-    public function testAClosureDerivedIdIsReportedOnStderr(): void
+    public function testAClosureDerivedIdIsReportedOnStderrOnceWhenACorpusIsInUse(): void
     {
         $stderr = fopen('php://memory', 'w+');
         self::assertIsResource($stderr);
+        $restore = Env::set('PROPERTY_DB', sys_get_temp_dir() . '/property-testing-phpunit-warn-' . getmypid());
 
-        // Reproduces what Pest does: forAll() called from a closure, so the
-        // derived id carries {closure and the corpus key would move.
-        $run = function () use ($stderr): void {
-            $this->forAll(['value' => Gen::intBetween(0, 10)])
-                ->runs(3)
-                ->output(STDOUT, $stderr)
-                ->check(static function (int $value): void {
-                    self::assertGreaterThanOrEqual(0, $value);
-                });
-        };
-        $run();
+        try {
+            // Reproduces what Pest does: forAll() called from a closure, so the
+            // derived id carries {closure and the corpus key would move. Run
+            // twice: the warning is about the id, not about the check(), so it
+            // is printed once per id in a process.
+            $run = function () use ($stderr): void {
+                $this->forAll(['value' => Gen::intBetween(0, 10)])
+                    ->runs(3)
+                    ->output(STDOUT, $stderr)
+                    ->check(static function (int $value): void {
+                        self::assertGreaterThanOrEqual(0, $value);
+                    });
+            };
+            $run();
+            $run();
+        } finally {
+            $restore();
+        }
 
         rewind($stderr);
         $warning = (string) stream_get_contents($stderr);
@@ -451,16 +459,18 @@ final class EnvironmentParityTest extends TestCase
             '/^Property id "[^"]*\{closure[^"]*" comes from a closure and is not stable: .+pass an explicit property id\n$/s',
             $warning,
         );
+        self::assertSame(1, substr_count($warning, "\n"));
     }
 
-    public function testANamedPropertyWarnsAboutNothing(): void
+    public function testAnUnstableIdIsNotReportedWithoutACorpus(): void
     {
+        // Without PROPERTY_DB nothing is keyed by the id, so there is nothing
+        // to warn about — and under Pest every test would otherwise print one.
         $stderr = fopen('php://memory', 'w+');
         self::assertIsResource($stderr);
 
         $run = function () use ($stderr): void {
             $this->forAll(['value' => Gen::intBetween(0, 10)])
-                ->id('named::property')
                 ->runs(3)
                 ->output(STDOUT, $stderr)
                 ->check(static function (int $value): void {
@@ -474,15 +484,46 @@ final class EnvironmentParityTest extends TestCase
         self::assertSame('', (string) stream_get_contents($stderr));
     }
 
+    public function testANamedPropertyWarnsAboutNothing(): void
+    {
+        $stderr = fopen('php://memory', 'w+');
+        self::assertIsResource($stderr);
+        $restore = Env::set('PROPERTY_DB', sys_get_temp_dir() . '/property-testing-phpunit-warn-' . getmypid());
+
+        try {
+            $run = function () use ($stderr): void {
+                $this->forAll(['value' => Gen::intBetween(0, 10)])
+                    ->id('named::property')
+                    ->runs(3)
+                    ->output(STDOUT, $stderr)
+                    ->check(static function (int $value): void {
+                        self::assertGreaterThanOrEqual(0, $value);
+                    });
+            };
+            $run();
+        } finally {
+            $restore();
+        }
+
+        rewind($stderr);
+
+        self::assertSame('', (string) stream_get_contents($stderr));
+    }
+
     public function testAHelperDerivedIdIsReportedOnStderr(): void
     {
         $stderr = fopen('php://memory', 'w+');
         self::assertIsResource($stderr);
+        $restore = Env::set('PROPERTY_DB', sys_get_temp_dir() . '/property-testing-phpunit-warn-' . getmypid());
 
-        // forAll() is called inside checkViaHelper(), so the derived id names
-        // the helper, not this test method — every test using the helper would
-        // share one corpus entry.
-        $this->checkViaHelper($stderr);
+        try {
+            // forAll() is called inside checkViaHelper(), so the derived id names
+            // the helper, not this test method — every test using the helper would
+            // share one corpus entry.
+            $this->checkViaHelper($stderr);
+        } finally {
+            $restore();
+        }
 
         rewind($stderr);
         $warning = (string) stream_get_contents($stderr);
@@ -497,8 +538,13 @@ final class EnvironmentParityTest extends TestCase
     {
         $stderr = fopen('php://memory', 'w+');
         self::assertIsResource($stderr);
+        $restore = Env::set('PROPERTY_DB', sys_get_temp_dir() . '/property-testing-phpunit-warn-' . getmypid());
 
-        $this->checkViaHelper($stderr, 'pinned::property');
+        try {
+            $this->checkViaHelper($stderr, 'pinned::property');
+        } finally {
+            $restore();
+        }
 
         rewind($stderr);
 
