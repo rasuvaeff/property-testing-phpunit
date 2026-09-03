@@ -11,7 +11,7 @@ composer require --dev rasuvaeff/property-testing-phpunit
 
 Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
 (PHPUnit 13 requires PHP 8.4.1+; PHP 8.3 resolves PHPUnit 11 or 12),
-`rasuvaeff/property-testing-core` `^0.5`.
+`rasuvaeff/property-testing-core` `^0.5 || ^0.6`.
 
 ## Rules
 
@@ -77,7 +77,7 @@ public function output($stdout, $stderr): self;      // redirect reports/trace s
 public function check(\Closure $property): void;     // run the property
 ```
 
-Auto-derivation (`auto()`, requires core ^0.4): every parameter the forAll()
+Auto-derivation (`auto()`, requires core ^0.5): every parameter the forAll()
 map does not cover is derived from the closure's signature via
 Gen::forParameters — the `@param` psalm type from the closure's docblock wins
 over the native type; unreadable types (bare array, mixed, untyped, variadic)
