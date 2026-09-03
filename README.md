@@ -31,7 +31,7 @@ read — inside an ordinary PHPUnit `TestCase`.
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.5`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.5 || ^0.6`
 
 PHPUnit 13 requires PHP 8.4.1 or newer. On PHP 8.3, Composer resolves a
 compatible PHPUnit 11 or 12 release.
