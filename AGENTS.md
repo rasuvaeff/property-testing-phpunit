@@ -113,9 +113,11 @@ changing both.
 
 - *Risky per run.* Testo can mark a single run risky; PHPUnit signals risky at
   the test level, so there is no per-run equivalent to mirror.
-  `PhpUnitTrialExecutor` compensates by counting an assertion
-  (`addToAssertionCount(1)`), which is what keeps a property whose body asserts
-  nothing on some runs out of the risky bucket.
+  `PropertyCheck` compensates by counting one assertion for a property that
+  passed (`$this->testCase->addToAssertionCount(1)`), which is what keeps a
+  property whose body asserts nothing on some runs out of the risky bucket.
+  `PhpUnitTrialExecutor` only counts the skipped runs; the assertion is the
+  check's, because it is one per property, not one per run.
 - *Data-set naming.* The corpus id of a data-provider case reads
   `Class::method with data set "0"`, where PHPUnit's own output prints `#0` for
   a numeric key. Deliberate: this string is a corpus key, and respelling it
