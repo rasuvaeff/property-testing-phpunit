@@ -7,6 +7,7 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
+use PHPUnit\Framework\SkippedWithMessageException;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
@@ -179,6 +180,44 @@ final class EnvironmentParityTest extends TestCase
         } catch (AssertionFailedError $failure) {
             self::assertInstanceOf(RegressionViolationException::class, $failure->getPrevious());
         }
+    }
+
+    public function testASkippedReplayKeepsTheRecordedRegression(): void
+    {
+        // A discard on replay means the recorded input left the property's
+        // domain, so the entry is pruned. A skip means this environment would
+        // not run the body — it says nothing about the input, and pruning on it
+        // would delete the counterexample for every environment that can check
+        // it.
+        putenv('PROPERTY_DB=' . $this->corpusDir);
+
+        try {
+            $this->runFalsifiableProperty();
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            // Recorded.
+        }
+
+        $recorded = glob($this->corpusDir . '/*.json') ?: [];
+        self::assertNotSame([], $recorded);
+        $before = file_get_contents($recorded[0]);
+
+        // Same property, in an environment that cannot run it.
+        $check = $this->forAll(['value' => Gen::intBetween(0, 10_000)])->runs(100);
+        $check->id(self::class . '::runFalsifiableProperty');
+
+        try {
+            $check->check(static function (int $value): void {
+                self::markTestSkipped('the dependency this body needs is missing');
+            });
+
+            self::fail('The property should have been reported as skipped');
+        } catch (SkippedWithMessageException) {
+            // Every run skipped, so the test itself is skipped.
+        }
+
+        self::assertSame($before, file_get_contents($recorded[0]));
     }
 
     public function testAnExplicitSeedDisablesCorpusReplay(): void

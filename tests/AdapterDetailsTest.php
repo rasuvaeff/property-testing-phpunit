@@ -7,14 +7,12 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
-use PHPUnit\Framework\SkippedTest;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\Assume;
 use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
 use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\Gen;
-use Rasuvaeff\PropertyTesting\PhpUnit\PhpUnitTrialExecutor;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
@@ -26,7 +24,6 @@ use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
  * mutation gate holds this package to.
  */
 #[CoversClass(PropertyCheck::class)]
-#[CoversClass(PhpUnitTrialExecutor::class)]
 #[CoversTrait(PropertyTesting::class)]
 final class AdapterDetailsTest extends TestCase
 {
@@ -43,25 +40,6 @@ final class AdapterDetailsTest extends TestCase
     protected function tearDown(): void
     {
         ($this->restoreEnv)();
-    }
-
-    public function testAnEnvironmentalSkipIsReportedAsASkipNotAPlainDiscard(): void
-    {
-        // The engine counts a skip and a discard the same everywhere but the
-        // corpus phase, where a discard means "the recorded input left the
-        // property's domain" and the entry is pruned. `markTestSkipped()` says
-        // nothing about the input, so reporting it as a discard let a machine
-        // without the dependency delete the counterexample for every machine
-        // that has it.
-        $executor = new PhpUnitTrialExecutor(static function (int $x): void {
-            self::markTestSkipped('no redis here');
-        });
-
-        $outcome = $executor->execute(['x' => 1]);
-
-        self::assertTrue($outcome->isSkipped());
-        self::assertTrue($outcome->isDiscarded());
-        self::assertInstanceOf(SkippedTest::class, $executor->everyRunSkippedWith());
     }
 
     public function testThePropertyIdIsClassColonColonMethod(): void
