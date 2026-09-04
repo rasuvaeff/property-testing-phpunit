@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.3 — 2026-09-04
 
 - Allows `rasuvaeff/property-testing-core` `^0.7`.
 - The discard warning is printed before the distribution line, matching the
