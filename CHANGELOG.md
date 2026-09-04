@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Allows `rasuvaeff/property-testing-core` `^0.7`.
+- The discard warning is printed before the distribution line, matching the
+  Testo adapter; the two emitted the same pair in opposite orders.
+- `PropertyCheck::clock()` — an internal seam, mirroring the Testo adapter, that
+  makes the `timeoutMs` and `budgetMs` branches testable without real waiting.
+- The `id()` documentation is attached to `id()` again; it had drifted onto
+  `currentId()`, leaving both methods undocumented.
+
 ## 0.6.2 — 2026-09-03
 
 - Synchronize the published dependency documentation with the supported

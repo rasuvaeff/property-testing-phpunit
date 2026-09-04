@@ -14,6 +14,7 @@ use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\Assume;
 use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\CoverageViolationException;
+use Rasuvaeff\PropertyTesting\DeadlineExceededException;
 use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
 use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\ExampleViolationException;
@@ -22,10 +23,12 @@ use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
+use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\FakeClock;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
 use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
+use Rasuvaeff\PropertyTesting\TimeBudgetExceededException;
 
 #[CoversClass(PropertyCheck::class)]
 #[CoversTrait(PropertyTesting::class)]
@@ -266,6 +269,45 @@ final class PropertyCheckTest extends TestCase
             ->check(static function (int $value): void {
                 self::assertGreaterThanOrEqual(0, $value);
             });
+    }
+
+    public function testAFakeClockMakesTheRunDeadlineDeterministic(): void
+    {
+        // Six milliseconds per reading against a five-millisecond deadline: the
+        // first run overruns, and it does so without the suite waiting for real
+        // time. This is what the clock seam exists for.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(10)
+                ->seed(5)
+                ->timeoutMs(5)
+                ->clock(new FakeClock(6_000_000))
+                ->check(static function (int $value): void {
+                    self::assertGreaterThanOrEqual(0, $value);
+                });
+
+            self::fail('expected the run deadline to be exceeded');
+        } catch (AssertionFailedError $e) {
+            self::assertInstanceOf(DeadlineExceededException::class, $e->getPrevious());
+        }
+    }
+
+    public function testAFakeClockMakesThePhaseBudgetDeterministic(): void
+    {
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(100)
+                ->seed(5)
+                ->budgetMs(5)
+                ->clock(new FakeClock(6_000_000))
+                ->check(static function (int $value): void {
+                    self::assertGreaterThanOrEqual(0, $value);
+                });
+
+            self::fail('expected the phase budget to be exceeded');
+        } catch (AssertionFailedError $e) {
+            self::assertInstanceOf(TimeBudgetExceededException::class, $e->getPrevious());
+        }
     }
 
     public function testShrinkOffReportsTheCounterexampleAsGenerated(): void

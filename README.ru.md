@@ -31,7 +31,7 @@ shrink до минимального контрпримера, который р
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.5 || ^0.6`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.5 || ^0.6 || ^0.7`
 
 PHPUnit 13 требует PHP 8.4.1 или новее. На PHP 8.3 Composer выбирает
 совместимый релиз PHPUnit 11 или 12.

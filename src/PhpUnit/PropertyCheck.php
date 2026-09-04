@@ -10,6 +10,7 @@ use Rasuvaeff\PropertyTesting\ArbitraryInterface;
 use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\PropertyId;
 use Rasuvaeff\PropertyTesting\PropertyListener;
+use Rasuvaeff\PropertyTesting\Runner\Clock;
 use Rasuvaeff\PropertyTesting\Runner\Corpus;
 use Rasuvaeff\PropertyTesting\Runner\CorpusFactory;
 use Rasuvaeff\PropertyTesting\Runner\CoverageFailed;
@@ -85,6 +86,8 @@ final class PropertyCheck
     /** @var resource */
     private $stderr = STDERR;
 
+    private ?Clock $clock = null;
+
     /**
      * @param array<string, ArbitraryInterface> $generators
      *
@@ -97,6 +100,16 @@ final class PropertyCheck
         private readonly array $generators,
         private bool $idDerivedIndirectly,
     ) {}
+
+    /**
+     * The id the corpus is keyed by, as currently resolved.
+     *
+     * @internal For this package's own tests.
+     */
+    public function currentId(): string
+    {
+        return $this->id;
+    }
 
     /**
      * Names the property, replacing the id derived from the calling method.
@@ -114,16 +127,6 @@ final class PropertyCheck
      * display name, so one string identifies it in the corpus, in the events
      * and in the printed output.
      */
-    /**
-     * The id the corpus is keyed by, as currently resolved.
-     *
-     * @internal For this package's own tests.
-     */
-    public function currentId(): string
-    {
-        return $this->id;
-    }
-
     public function id(string $id): self
     {
         $this->id = $id;
@@ -339,6 +342,21 @@ final class PropertyCheck
     }
 
     /**
+     * Replaces the runner's source of elapsed time — for tests of this adapter
+     * itself. The Testo adapter takes the same seam on its interceptor; without
+     * it the `timeoutMs` and `budgetMs` branches can only be reached by really
+     * waiting, which is not a test.
+     *
+     * @internal A seam for this package's own tests; the clock is not a contract.
+     */
+    public function clock(Clock $clock): self
+    {
+        $this->clock = $clock;
+
+        return $this;
+    }
+
+    /**
      * Runs the property. The closure's parameter names select the generators.
      *
      * @param \Closure(mixed...): void $property
@@ -394,7 +412,7 @@ final class PropertyCheck
         }
 
         $executor = new PhpUnitTrialExecutor($property);
-        $result = (new PropertyRunner())->run($definition, $executor, $listeners, $corpus);
+        $result = (new PropertyRunner($this->clock))->run($definition, $executor, $listeners, $corpus);
 
         $skip = $executor->everyRunSkippedWith();
 
@@ -414,8 +432,11 @@ final class PropertyCheck
         };
 
         if ($statistics instanceof RunStatistics) {
-            $this->reportClassifications($statistics);
+            // Warning first, then the distribution — the order the Testo
+            // adapter prints them in. Both adapters share one log whenever a
+            // suite merges the two streams; see AGENTS.md.
             $this->warnOnExcessiveSkips($statistics);
+            $this->reportClassifications($statistics);
         }
 
         $failure = $result->failure();
