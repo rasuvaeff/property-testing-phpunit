@@ -14,9 +14,10 @@ use Rasuvaeff\PropertyTesting\Runner\TrialOutcome;
  * Runs the property body and folds what it throws into the engine's
  * {@see TrialOutcome} the way PHPUnit means it: {@see AssumptionSkipped} is a
  * discard; a skipped or incomplete test (`markTestSkipped()`,
- * `markTestIncomplete()`) is a discard too, and remembered — a property whose
- * every run was skipped is a skipped test, not a falsified one shrunk toward
- * the smallest input that still skips; anything else thrown is the failure.
+ * `markTestIncomplete()`) is a skip — a discard the corpus phase does not prune
+ * on — and remembered, so a property whose every run was skipped is a skipped
+ * test, not a falsified one shrunk toward the smallest input that still skips;
+ * anything else thrown is the failure.
  *
  * @internal Driven by {@see PropertyCheck}.
  */
@@ -45,7 +46,13 @@ final class PhpUnitTrialExecutor implements TrialExecutor
             ++$this->skipped;
             $this->firstSkip ??= $skip;
 
-            return TrialOutcome::discarded();
+            // A skip, not a plain discard: the engine counts both the same
+            // everywhere but the corpus phase, where a discard means the
+            // recorded input left the property's domain and the entry is
+            // pruned. A skip says nothing about the input, so reporting one as
+            // a discard let a machine without the dependency the body guards
+            // against delete the counterexample for every machine that has it.
+            return TrialOutcome::skipped();
         } catch (\Throwable $failure) {
             return TrialOutcome::failed($failure);
         }

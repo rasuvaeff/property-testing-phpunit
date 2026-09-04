@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- An environmental skip (`markTestSkipped()`, `markTestIncomplete()`) is
+  reported to the engine as `TrialOutcome::skipped()` rather than as a plain
+  discard, so a recorded regression whose replay only skipped is kept instead
+  of pruned. A machine without the dependency the body guards against used to
+  delete the counterexample for every machine that has it. Requires
+  `rasuvaeff/property-testing-core` ^0.8.
+
 ## 0.6.3 — 2026-09-04
 
 - Allows `rasuvaeff/property-testing-core` `^0.7`.
