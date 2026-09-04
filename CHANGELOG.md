@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-09-04
 
 - An environmental skip (`markTestSkipped()`, `markTestIncomplete()`) is
   reported to the engine as `TrialOutcome::skipped()` rather than as a plain
