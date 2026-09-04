@@ -103,6 +103,25 @@ parity is golden rule 3.
 | `PROPERTY_PATH` | Only when `path()` was not called (explicit path wins) | A recorded `CounterExample::$path` | Replays that shrink descent instead of searching for it; needs the seed of the run that produced it | engine rejects a path that would be a silent no-op |
 | `PROPERTY_EDGE_CASES` | Always (`false`/`''` = unset) | `mixin` or `none`, case-insensitive, trimmed | Numeric boundary bias for every run — **overrides** `edgeCases()` | `InvalidArgumentException` naming the accepted values |
 
+**Diagnostics print in a fixed order: the discard warning first, then the
+distribution.** Both adapters emit the same two lines for the same run, and a
+log that merges the two streams must not show them in different orders. The
+order is pinned here and in the Testo adapter's `AGENTS.md`; changing it means
+changing both.
+
+**Two framework asymmetries the parity rule does not cover.**
+
+- *Risky per run.* Testo can mark a single run risky; PHPUnit signals risky at
+  the test level, so there is no per-run equivalent to mirror.
+  `PhpUnitTrialExecutor` compensates by counting an assertion
+  (`addToAssertionCount(1)`), which is what keeps a property whose body asserts
+  nothing on some runs out of the risky bucket.
+- *Data-set naming.* The corpus id of a data-provider case reads
+  `Class::method with data set "0"`, where PHPUnit's own output prints `#0` for
+  a numeric key. Deliberate: this string is a corpus key, and respelling it
+  would orphan every entry recorded so far. Only the printed name follows
+  PHPUnit; the id does not.
+
 The split is deliberate and worth stating: **the environment dials the suite,
 the code pins the property.** `PROPERTY_RUNS`, `PROPERTY_PHASES` and
 `PROPERTY_DERANDOMIZE` are CI knobs and win over the chain; `PROPERTY_SEED` and
@@ -139,7 +158,7 @@ replay (`PropertyDefinition::$replayRegressions = false`), the **env**
   `id()` is the fix — it replaces the derived id for the corpus, the events
   and the printed name alike.
 - **Infection runs through PHPUnit** — `infection.json5` sets no
-  `testFramework` (default is phpunit), `minMsi` 90. No
+  `testFramework` (default is phpunit), `minMsi` 95. No
   `testo/bridge-infection` here.
 - **No `benchmarks/` here, deliberately.** The root `AGENTS.md` template
   benchmarks convention (`#[Bench]` + `composer bench` running
