@@ -207,7 +207,9 @@ printed output.
 - `markTestSkipped()` / `markTestIncomplete()` inside the body **skip that
   run** (a discard); when every run skipped, the skip is rethrown and PHPUnit
   reports the test as skipped or incomplete. Partly skipped runs count against
-  `maxDiscards`.
+  `maxDiscards`. Unlike an `Assume::that()` discard, a skip says nothing about
+  the input, so a recorded regression whose replay only skipped stays in the
+  corpus instead of being pruned.
 - `expectException()` does not see the body's exception: the engine catches
   it as the run's failure. Assert on exceptions inside the body instead.
 - `setUp()` runs once per test, not per generated input — a property is one
