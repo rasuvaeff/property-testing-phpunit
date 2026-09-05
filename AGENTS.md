@@ -52,7 +52,7 @@ monorepo root with the whole root mounted, e.g.
 `docker run --rm -v "$PWD":/repo -w /repo/property-testing-phpunit composer:2 …`):
 
 ```bash
-composer config repositories.core '{"type":"path","url":"../property-testing-core","options":{"versions":{"rasuvaeff/property-testing-core":"0.2.0"}}}'
+composer config repositories.core '{"type":"path","url":"../property-testing-core","options":{"versions":{"rasuvaeff/property-testing-core":"0.9.0"}}}'
 composer update
 composer config --unset repositories.core
 rm composer.lock
