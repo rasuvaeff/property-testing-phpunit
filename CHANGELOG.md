@@ -2,10 +2,12 @@
 
 ## 0.7.1 — 2026-09-05
 
-- Accepts `rasuvaeff/property-testing-core` `^0.9`, where an environmental skip
+- Requires `rasuvaeff/property-testing-core` `^0.9`, where an environmental skip
   no longer spends the discard budget and is counted apart from discards. The
   excessive-discard warning this adapter prints therefore stops firing on a
-  machine that was merely missing a dependency, without a change here.
+  machine that was merely missing a dependency, without a change here. `^0.8` is
+  not kept alongside: the family moves together, and an adapter accepting both
+  is what left `-names` unable to install beside one.
 
 ## 0.7.0 — 2026-09-04
 
