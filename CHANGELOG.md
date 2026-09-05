@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — 2026-09-05
+
+- Accepts `rasuvaeff/property-testing-core` `^0.9`, where an environmental skip
+  no longer spends the discard budget and is counted apart from discards. The
+  excessive-discard warning this adapter prints therefore stops firing on a
+  machine that was merely missing a dependency, without a change here.
+
 ## 0.7.0 — 2026-09-04
 
 - An environmental skip (`markTestSkipped()`, `markTestIncomplete()`) is
