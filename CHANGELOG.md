@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `composer rector` is green again: the unused variable in
+  `EnvironmentParityTest`'s `catch` is gone, as `RemoveUnusedVariableInCatchRector`
+  asks. It had been red since that test was written, which is `composer
+  release-check` red — `composer build` does not run rector.
+
 ## 0.7.1 — 2026-09-05
 
 - Requires `rasuvaeff/property-testing-core` `^0.9`, where an environmental skip

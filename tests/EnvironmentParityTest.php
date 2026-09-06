@@ -195,7 +195,7 @@ final class EnvironmentParityTest extends TestCase
             $this->runFalsifiableProperty();
 
             self::fail('The property should have been falsified');
-        } catch (AssertionFailedError $failure) {
+        } catch (AssertionFailedError) {
             // Recorded.
         }
 
