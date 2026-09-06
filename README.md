@@ -31,7 +31,7 @@ read — inside an ordinary PHPUnit `TestCase`.
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.9`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.9 || ^0.10`
 
 PHPUnit 13 requires PHP 8.4.1 or newer. On PHP 8.3, Composer resolves a
 compatible PHPUnit 11 or 12 release.
@@ -100,7 +100,7 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `runs(int)` | Successful checks to complete (default 100). Discarded runs do not count |
 | `seed(int)` | Pins the random phase for reproduction. Also disables corpus replay — the pinned run wins |
 | `maxShrinks(int)` | Cap on accepted shrink steps; `0` disables shrinking |
-| `maxDiscards(int)` | Discard budget before the property fails with `GaveUpException`; default `runs * 10` |
+| `maxDiscards(int)` | Cap for the discard budget **and** the skip budget. Left unset the two differ: `runs * 10` for discards, `runs` for environmental skips |
 | `timeoutMs(int)` | Wall-clock deadline for a single run — exceeding it fails with `DeadlineExceededException` |
 | `budgetMs(int)` | Wall-clock budget for the whole random phase — running out fails with `TimeBudgetExceededException` |
 | `examples(array)` | Fixed positional argument tuples run **before** the random phase; a failing example short-circuits, unshrunk |
@@ -112,7 +112,6 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `path(string)` | Replays a recorded shrink descent instead of searching for it; needs the seed that produced it |
 | `edgeCases(EdgeCases)` | `None` turns off the numeric boundary bias — for a property the edges only cost runs |
 | `auto(bool = true)` | Derives generators from the closure's signature for every parameter the `forAll()` map does not cover; the map becomes partial overrides. Off by default, and stays off |
-| `output($stdout, $stderr)` | Redirects the distribution report, discard warning and verbose trace (used by this package's own tests) |
 
 ### Auto-derived generators (`auto()`)
 
@@ -206,10 +205,12 @@ printed output.
   engine — never a skipped PHPUnit test.
 - `markTestSkipped()` / `markTestIncomplete()` inside the body **skip that
   run** (a discard); when every run skipped, the skip is rethrown and PHPUnit
-  reports the test as skipped or incomplete. Partly skipped runs count against
-  `maxDiscards`. Unlike an `Assume::that()` discard, a skip says nothing about
-  the input, so a recorded regression whose replay only skipped stays in the
-  corpus instead of being pruned.
+  reports the test as skipped or incomplete. Partly skipped runs spend a budget
+  of their own, separate from `maxDiscards`: since core 0.9 a skip is not a
+  discard, and when that budget runs out the message names the environment
+  rather than advising narrower generators. Unlike an `Assume::that()` discard,
+  a skip says nothing about the input, so a recorded regression whose replay
+  only skipped stays in the corpus instead of being pruned.
 - `expectException()` does not see the body's exception: the engine catches
   it as the run's failure. Assert on exceptions inside the body instead.
 - `setUp()` runs once per test, not per generated input — a property is one

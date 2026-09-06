@@ -5,7 +5,7 @@ Guidance for AI agents working on this package. Read before changing code.
 ## What this is
 
 The PHPUnit adapter of the property-testing family — a thin layer over
-`rasuvaeff/property-testing-core`. It ships three classes:
+`rasuvaeff/property-testing-core`. It ships four types:
 
 - `Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting` — the trait a `TestCase`
   mixes in; `final protected forAll(array $generators): PropertyCheck` is the
@@ -13,7 +13,7 @@ The PHPUnit adapter of the property-testing family — a thin layer over
 - `Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck` — the fluent builder:
   resolves the chain and the environment into a core
   `PropertyDefinition`/`PropertyConfig`/`Corpus`, executes the closure through
-  `CallableTrialExecutor`, and maps the structured `PropertyResult` onto
+  `PhpUnitTrialExecutor` (`@internal`, since 0.6.0), and maps the structured `PropertyResult` onto
   PHPUnit — a pass registers one assertion via
   `TestCase::addToAssertionCount()`, every failing outcome becomes one
   `AssertionFailedError` with the engine failure as `previous`. It also prints
@@ -97,7 +97,7 @@ parity is golden rule 3.
 | `PROPERTY_RUNS` | Always (`false`/`''` = unset) | `/^\d+\z/`, `>= 1` | Overrides every property's run count, including `runs()` | `InvalidArgumentException` |
 | `PROPERTY_SEED` | Only when `seed()` was not called (explicit seed wins) | `/^-?\d+\z/` | Seeds every unseeded property; unset means a random seed per property | `InvalidArgumentException` |
 | `PROPERTY_VERBOSE` | Always | Any value except `''` and `'0'` enables | Attaches `VerboseListener`: every run's arguments/draws and each accepted shrink step | n/a (falsy values disable) |
-| `PROPERTY_DB` | Always (`false`/`''` = off, nothing written) | Directory path (created on demand) **or** `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; core `CorpusFactory`) | Regression corpus via `CorpusFromEnv::resolve()`: a path builds a `FilesystemCorpus`, a DSN a `RedisCorpus` (ext-redis preferred, else predis). An explicit `seed()` disables replay for that property | `InvalidArgumentException` — an unusable DSN, or no Redis client installed. Never a silent fall back to the filesystem |
+| `PROPERTY_DB` | Always (`false`/`''` = off, nothing written) | Directory path (created on demand) **or** `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; core `CorpusFactory`) | Regression corpus via core's `CorpusFactory::fromDsn()` (`CorpusFromEnv` was removed in 0.6.0): a path builds a `FilesystemCorpus`, a DSN a `RedisCorpus` (ext-redis preferred, else predis). An explicit `seed()` disables replay for that property | `InvalidArgumentException` — an unusable DSN, or no Redis client installed. Never a silent fall back to the filesystem |
 | `PROPERTY_PHASES` | Always (`false`/`''` = unset) | Comma-separated phase names, case-insensitive: `examples`, `corpus`, `random`, `shrink` | Stages of every run, in run order — **overrides** `phases()` | `InvalidArgumentException` naming the accepted values |
 | `PROPERTY_DERANDOMIZE` | Always | Any value except `''` and `'0'` enables | Derives every unset seed from the property id — **overrides** `derandomize()` | n/a (falsy values disable) |
 | `PROPERTY_PATH` | Only when `path()` was not called (explicit path wins) | A recorded `CounterExample::$path` | Replays that shrink descent instead of searching for it; needs the seed of the run that produced it | engine rejects a path that would be a silent no-op |
