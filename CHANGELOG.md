@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Accepts `rasuvaeff/property-testing-core` `^0.10` alongside `^0.9`.
+- Documentation catches up with core 0.9 and 0.10, from the family's 1.0
+  review: a partly skipped property spends a **separate** budget rather than
+  counting against `maxDiscards` (README ×2), and `maxDiscards()` caps both
+  budgets when set while leaving them different when unset (fluent-chain table
+  ×2). `output()` leaves that table — the section below it already calls the
+  method `@internal`, and a public table listing it contradicted that inside
+  one document.
+- `AGENTS.md` says four types rather than three (`PhpUnitTrialExecutor` has
+  shipped since 0.6.0), names that executor rather than core's
+  `CallableTrialExecutor` as the one running the closure, and no longer routes
+  the corpus through `CorpusFromEnv::resolve()` — a class this package removed
+  in 0.6.0.
+- `psalm.xml` no longer enables `ext-redis` and `composer-require-checker.json`
+  no longer whitelists `Predis\Client` and `Redis`. Both were left over from
+  0.6, when this package parsed the DSN itself; neither `src/` file has
+  mentioned Redis since. `.gitattributes` drops `export-ignore` entries for
+  `/docs`, `/benchmarks` and `/ROADMAP.md`, none of which exist here.
 - `composer rector` is green again: the unused variable in
   `EnvironmentParityTest`'s `catch` is gone, as `RemoveUnusedVariableInCatchRector`
   asks. It had been red since that test was written, which is `composer

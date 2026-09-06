@@ -6,12 +6,9 @@
 /AGENTS.md export-ignore
 /CLAUDE.md export-ignore
 /Makefile export-ignore
-/benchmarks export-ignore
-/docs export-ignore
 /examples export-ignore
 /infection.json5 export-ignore
 /psalm.xml export-ignore
 /rector.php export-ignore
-/ROADMAP.md export-ignore
 /phpunit.xml export-ignore
 /tests export-ignore

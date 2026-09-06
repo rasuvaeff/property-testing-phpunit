@@ -31,7 +31,7 @@ shrink до минимального контрпримера, который р
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.9`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.9 || ^0.10`
 
 PHPUnit 13 требует PHP 8.4.1 или новее. На PHP 8.3 Composer выбирает
 совместимый релиз PHPUnit 11 или 12.
@@ -100,7 +100,7 @@ Property falsified after 12 successful run(s); seed=7382910
 | `runs(int)` | Сколько успешных проверок выполнить (по умолчанию 100). Discard-прогоны не считаются |
 | `seed(int)` | Пинит random-фазу для воспроизведения. Одновременно отключает replay корпуса — запиненный прогон важнее |
 | `maxShrinks(int)` | Потолок принятых shrink-шагов; `0` выключает shrinking |
-| `maxDiscards(int)` | Бюджет discard'ов до провала с `GaveUpException`; по умолчанию `runs * 10` |
+| `maxDiscards(int)` | Порог для бюджета discard'ов **и** бюджета skip'ов. Оставленные неявными, они различаются: `runs * 10` для discard'ов и `runs` для skip'ов окружения |
 | `timeoutMs(int)` | Wall-clock дедлайн одного прогона — превышение валит property с `DeadlineExceededException` |
 | `budgetMs(int)` | Wall-clock бюджет всей random-фазы — исчерпание валит с `TimeBudgetExceededException` |
 | `examples(array)` | Фиксированные позиционные кортежи аргументов, выполняются **до** random-фазы; упавший пример останавливает прогон и не shrink-ается |
@@ -112,7 +112,6 @@ Property falsified after 12 successful run(s); seed=7382910
 | `path(string)` | Воспроизводит записанный спуск shrink вместо повторного поиска; нужен seed того прогона |
 | `edgeCases(EdgeCases)` | `None` выключает граничное смещение числовых генераторов — для property, которой края стоят только прогонов |
 | `auto(bool = true)` | Достраивает генераторы из сигнатуры кложуры для параметров, не покрытых картой `forAll()`; карта становится частичными overrides. По умолчанию выключен и дефолтом не станет |
-| `output($stdout, $stderr)` | Перенаправляет отчёт распределения, предупреждение о discard'ах и verbose-трассу (используется тестами самого пакета) |
 
 ### Автогенераторы из сигнатуры (`auto()`)
 
@@ -206,7 +205,9 @@ $this->forAll(['values' => Gen::arrayOf(Gen::int())])
 - `markTestSkipped()` / `markTestIncomplete()` внутри тела **пропускают этот
   прогон** (discard); если пропущены все прогоны, исключение пробрасывается, и
   PHPUnit помечает тест skipped/incomplete. Частично пропущенные прогоны
-  учитываются в `maxDiscards`. В отличие от discard'а по `Assume::that()`, skip
+  тратят собственный бюджет, отдельный от `maxDiscards`: с core 0.9 skip — не
+  discard, и при исчерпании этого бюджета сообщение называет окружение, а не
+  советует сузить генераторы. В отличие от discard'а по `Assume::that()`, skip
   ничего не говорит о входе, поэтому записанная регрессия, чей реплей только
   скипнулся, остаётся в корпусе, а не вычищается.
 - `expectException()` не видит исключение тела: движок ловит его как падение
