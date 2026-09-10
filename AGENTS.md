@@ -17,7 +17,11 @@ The PHPUnit adapter of the property-testing family — a thin layer over
   PHPUnit — a pass registers one assertion via
   `TestCase::addToAssertionCount()`, every failing outcome becomes one
   `AssertionFailedError` with the engine failure as `previous`. It also prints
-  the distribution report and the >90%-discard warning;
+  the distribution report and the >90%-discard warning. `throws(string)` is
+  the property-level replacement for `expectException()` (which never sees a
+  throw from inside the body): the executor turns a throw of the expected
+  class into a pass and a silent return into the failure "Expected \<class\>
+  to be thrown, but it was not"; skips and discards keep their own meaning;
 - `Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener` — `PROPERTY_VERBOSE`
   output as an exception-hardened engine listener (`@internal`).
 

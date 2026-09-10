@@ -4,7 +4,7 @@ Runnable examples for `rasuvaeff/property-testing-phpunit`.
 
 | Example | Shows | Needs server? |
 |---|---|---|
-| `SortPropertyTest.php` | A complete property-based PHPUnit `TestCase`: the `PropertyTesting` trait, the fluent `forAll()->runs()->check()` chain, `Classify::when()` distribution labels, and an `Assume::that()` discard — four properties over plain string/sort functions, including one with `auto()`-derived generators | No |
+| `SortPropertyTest.php` | A complete property-based PHPUnit `TestCase`: the `PropertyTesting` trait, the fluent `forAll()->runs()->check()` chain, `Classify::when()` distribution labels, an `Assume::that()` discard, a `throws()` expected-exception property, and `auto()`-derived generators — five properties over plain string/sort functions | No |
 
 ## Running
 
