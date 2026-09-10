@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-09-10
 
 - Added `PropertyCheck::throws(string $exceptionClass)`: the property-level
   replacement for `expectException()`, which cannot see a throw from inside a
