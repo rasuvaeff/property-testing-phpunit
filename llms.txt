@@ -38,6 +38,12 @@ Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
   replaying. Pest's `it()`/`test()` bodies are the common case — call `->id()`
   there; the string is used verbatim as the corpus key, the event id AND the
   display name.
+- `expectException()` inside a `check()` closure never sees the body's throw
+  (the executor catches it first). Declare the expectation with `->throws()`
+  instead: every trial must throw the class (a subclass matches) — a trial
+  that returns normally or throws another class fails and shrinks. Skips and
+  `Assume::that()` discards are unaffected. A non-Throwable class string is
+  rejected with `InvalidArgumentException`.
 - Environment contract and corpus format are identical to the Testo adapter
   and to frozen `rasuvaeff/property-testing` 2.8 — corpora interoperate.
 - Generators, `Shrinkable`, `Assume`, `Classify`, `Gen::draw()`, state-machine
@@ -73,6 +79,7 @@ public function budgetMs(int $budgetMs): self;       // whole-phase wall-clock b
 public function examples(array $examples): self;     // list<list<mixed>> positional tuples, run first, never shrunk
 public function listeners(PropertyListener ...$listeners): self; // engine event observers
 public function auto(bool $auto = true): self;       // derive missing generators from the closure signature; forAll() map = partial overrides
+public function throws(string $exceptionClass): self; // class every trial must throw (subclass matches); no-throw fails with "Expected <class> to be thrown, but it was not"
 public function output($stdout, $stderr): self;      // redirect reports/trace streams (for tests)
 public function check(\Closure $property): void;     // run the property
 ```

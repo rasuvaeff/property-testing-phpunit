@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added `PropertyCheck::throws(string $exceptionClass)`: the property-level
+  replacement for `expectException()`, which cannot see a throw from inside a
+  `check()` closure. Every trial must throw the class (a subclass matches); a
+  trial that returns normally fails with "Expected \<class\> to be thrown, but
+  it was not" and shrinks like any other counterexample, a foreign class is
+  that trial's failure. Skips and `Assume::that()` discards keep their own
+  meaning. A class string that is not a `Throwable` is rejected with
+  `InvalidArgumentException` at the `throws()` call.
 - Accepts `rasuvaeff/property-testing-core` `^0.10` alongside `^0.9`.
 - Documentation catches up with core 0.9 and 0.10, from the family's 1.0
   review: a partly skipped property spends a **separate** budget rather than

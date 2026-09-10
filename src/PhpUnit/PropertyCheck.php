@@ -62,6 +62,7 @@ final class PropertyCheck
     private ?EdgeCases $edgeCases = null;
     private ?bool $derandomize = null;
     private bool $auto = false;
+    private ?string $expectedExceptionClass = null;
 
     /**
      * Ids already warned about in this process: one line per unstable id, not
@@ -139,8 +140,36 @@ final class PropertyCheck
     }
 
     /**
-     * Number of successful checks to complete; discarded runs do not count.
+     * The exception class every trial must throw. A trial that throws it
+     * passes; one that throws anything else, or returns normally, fails and
+     * shrinks like any other counterexample.
+     *
+     * This is the property-level replacement for `expectException()`, which
+     * cannot work inside a `check()` closure: the executor observes every
+     * throw before PHPUnit's own expectation mechanism does. A skip
+     * (`markTestSkipped()`, `markTestIncomplete()`) and an
+     * `Assume::that()` discard are still what they are — the environment's
+     * verdict about the run, never a pass earned by throwing.
+     *
+     * @param non-empty-string $exceptionClass
      */
+    public function throws(string $exceptionClass): self
+    {
+        if (!is_a($exceptionClass, \Throwable::class, allow_string: true)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Invalid expected exception class "%s": not a Throwable',
+                $exceptionClass,
+            ));
+        }
+
+        $this->expectedExceptionClass = $exceptionClass;
+
+        return $this;
+    }
+
+    /**
+      * Number of successful checks to complete; discarded runs do not count.
+      */
     public function runs(int $runs): self
     {
         $this->runs = $runs;
@@ -411,7 +440,7 @@ final class PropertyCheck
             $listeners[] = new VerboseListener($this->stdout);
         }
 
-        $executor = new PhpUnitTrialExecutor($property);
+        $executor = new PhpUnitTrialExecutor($property, $this->expectedExceptionClass);
         $result = (new PropertyRunner($this->clock))->run($definition, $executor, $listeners, $corpus);
 
         $skip = $executor->everyRunSkippedWith();
