@@ -112,6 +112,7 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `path(string)` | Replays a recorded shrink descent instead of searching for it; needs the seed that produced it |
 | `edgeCases(EdgeCases)` | `None` turns off the numeric boundary bias — for a property the edges only cost runs |
 | `auto(bool = true)` | Derives generators from the closure's signature for every parameter the `forAll()` map does not cover; the map becomes partial overrides. Off by default, and stays off |
+| `throws(string)` | The exception class every trial must throw — a trial that throws it passes, one that does not (or throws another class) fails and shrinks. The property-level replacement for `expectException()`, which never sees a throw from inside the body |
 
 ### Auto-derived generators (`auto()`)
 
@@ -192,6 +193,36 @@ the regression corpus and every event, and it also becomes the display name, so
 one string identifies the property in the corpus, in the events and in the
 printed output.
 
+### Expected exceptions (`throws()`)
+
+`expectException()` cannot work inside a `check()` closure: the executor
+observes every throw before PHPUnit's own expectation mechanism does, so the
+expected exception would falsify the property. `throws()` states the
+expectation where it is checked:
+
+```php
+$this->forAll(['width' => Gen::intBetween(1, 5000), 'minWidth' => Gen::intBetween(2, 5000)])
+    ->runs(200)
+    ->throws(ImageUploadException::class)
+    ->check(static function (int $width, int $minWidth): void {
+        $validator->validate(imageWithWidth($width), profileWithMinWidth($minWidth));
+    });
+```
+
+Semantics, per trial:
+
+- Throws the class (a subclass matches) — the trial **passes**.
+- Returns normally — the trial **fails** with `Expected <class> to be thrown,
+  but it was not`, and the input shrinks like any other counterexample.
+- Throws another class — that throw is the failure, exactly as it would be
+  without `throws()`.
+- `markTestSkipped()`/`markTestIncomplete()` still skip the run, and an
+  `Assume::that()` discard still discards it: the environment's verdict about
+  the run is never a pass earned by throwing.
+
+A class that is not a `Throwable` is rejected immediately — a typoed name
+would otherwise falsify every run without a word of explanation.
+
 ### How results map onto PHPUnit
 
 - A **pass** counts one assertion — the test is never marked risky.
@@ -212,7 +243,9 @@ printed output.
   a skip says nothing about the input, so a recorded regression whose replay
   only skipped stays in the corpus instead of being pruned.
 - `expectException()` does not see the body's exception: the engine catches
-  it as the run's failure. Assert on exceptions inside the body instead.
+  it as the run's failure. Declare the expectation with
+  [`throws()`](#expected-exceptions-throws) instead, or assert on the
+  exception inside the body.
 - `setUp()` runs once per test, not per generated input — a property is one
   test method with one `check()`.
 - With a **data provider**, the corpus id carries the data set name

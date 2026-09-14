@@ -165,6 +165,129 @@ final class PropertyCheckTest extends TestCase
         self::assertGreaterThanOrEqual(30, $listener->count(RunStarted::class));
     }
 
+    public function testThrowsPassesWhenEveryTrialThrowsTheExpectedClass(): void
+    {
+        // The property-level replacement for expectException(), which never
+        // sees a throw from inside a property body.
+        $before = $this->numberOfAssertionsPerformed();
+
+        $this->forAll(['value' => Gen::intBetween(0, 1_000)])
+            ->runs(25)
+            ->seed(9)
+            ->throws(\RuntimeException::class)
+            ->check(static function (int $value): void {
+                throw new \RuntimeException('too big: ' . $value);
+            });
+
+        self::assertGreaterThan($before, $this->numberOfAssertionsPerformed());
+    }
+
+    public function testThrowsAcceptsASubclassOfTheExpectedClass(): void
+    {
+        $this->forAll(['value' => Gen::intBetween(0, 100)])
+            ->runs(10)
+            ->seed(3)
+            ->throws(\Exception::class)
+            ->check(static function (int $value): void {
+                throw new \RuntimeException((string) $value);
+            });
+    }
+
+    public function testThrowsFailsWhenTheBodyReturnsNormally(): void
+    {
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(10)
+                ->seed(3)
+                ->throws(\RuntimeException::class)
+                ->check(static function (int $value): void {});
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            $reason = $previous->getPrevious();
+            self::assertInstanceOf(\RuntimeException::class, $reason);
+            self::assertSame('Expected RuntimeException to be thrown, but it was not', $reason->getMessage());
+        }
+    }
+
+    public function testThrowsFailsWhenTheBodyThrowsAnotherClass(): void
+    {
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(10)
+                ->seed(3)
+                ->throws(\RuntimeException::class)
+                ->check(static function (int $value): void {
+                    throw new \LogicException('wrong one');
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $previous);
+
+            // The unexpected throw itself is the counterexample's failure,
+            // exactly as it would be without throws().
+            self::assertInstanceOf(\LogicException::class, $previous->getPrevious());
+        }
+    }
+
+    public function testTheMissingThrowShrinksLikeAnyOtherCounterexample(): void
+    {
+        // Failing inputs are the ones that do not throw (value >= 100), so the
+        // descent lands on the smallest of them — the same shape the seeded
+        // falsification test pins for an ordinary assertion.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->seed(42)
+                ->throws(\RuntimeException::class)
+                ->check(static function (int $value): void {
+                    if ($value < 100) {
+                        throw new \RuntimeException('small enough');
+                    }
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertStringContainsString('seed=42', $failure->getMessage());
+            self::assertStringContainsString('Shrunk:   value=100', $failure->getMessage());
+        }
+    }
+
+    public function testASkipUnderThrowsIsStillASkipNotAPass(): void
+    {
+        // A skip is the environment's verdict about the run; it cannot earn
+        // the pass that throwing the expected class would.
+        $this->expectException(SkippedWithMessageException::class);
+        $this->expectExceptionMessage('no redis here');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(5)
+            ->throws(\RuntimeException::class)
+            ->check(static function (int $value): void {
+                self::markTestSkipped('no redis here');
+            });
+    }
+
+    public function testThrowsRejectsAClassThatIsNotAThrowable(): void
+    {
+        // A typoed class name would otherwise falsify every run without a
+        // word of explanation: instanceof against a nonexistent class is
+        // false, never an error.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->throws(\stdClass::class);
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame('Invalid expected exception class "stdClass": not a Throwable', $exception->getMessage());
+        }
+    }
+
     public function testExhaustedDiscardBudgetSurfacesTheGaveUpFailure(): void
     {
         $devnull = fopen('php://memory', 'r+');

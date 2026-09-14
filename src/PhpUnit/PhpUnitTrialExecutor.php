@@ -19,6 +19,12 @@ use Rasuvaeff\PropertyTesting\Runner\TrialOutcome;
  * test, not a falsified one shrunk toward the smallest input that still skips;
  * anything else thrown is the failure.
  *
+ * A body that throws inside a property never reaches PHPUnit's own
+ * `expectException()` mechanism — this executor sees the throwable first —
+ * so {@see PropertyCheck::throws()} states the expectation here instead: an
+ * expected class turns the throw into a pass, and a body that returns without
+ * throwing becomes the failure.
+ *
  * @internal Driven by {@see PropertyCheck}.
  */
 final class PhpUnitTrialExecutor implements TrialExecutor
@@ -31,6 +37,7 @@ final class PhpUnitTrialExecutor implements TrialExecutor
 
     public function __construct(
         private readonly \Closure $body,
+        private readonly ?string $expectedExceptionClass = null,
     ) {}
 
     #[\Override]
@@ -52,9 +59,25 @@ final class PhpUnitTrialExecutor implements TrialExecutor
             // pruned. A skip says nothing about the input, so reporting one as
             // a discard let a machine without the dependency the body guards
             // against delete the counterexample for every machine that has it.
+            // Checked before the expected class on purpose: a skip is the
+            // environment's verdict about the run, not a throw the property
+            // was declared to produce.
             return TrialOutcome::skipped();
         } catch (\Throwable $failure) {
+            if ($this->expectedExceptionClass !== null && $failure instanceof $this->expectedExceptionClass) {
+                return TrialOutcome::passed();
+            }
+
             return TrialOutcome::failed($failure);
+        }
+
+        if ($this->expectedExceptionClass !== null) {
+            return TrialOutcome::failed(
+                new \RuntimeException(sprintf(
+                    'Expected %s to be thrown, but it was not',
+                    $this->expectedExceptionClass,
+                )),
+            );
         }
 
         return TrialOutcome::passed();

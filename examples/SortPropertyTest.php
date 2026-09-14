@@ -87,6 +87,19 @@ final class SortPropertyTest extends TestCase
             );
     }
 
+    public function testANegativeRepeatIsRejected(): void
+    {
+        // throws() is the property-level expectException(): a throw from
+        // inside the body never reaches PHPUnit's own expectation mechanism,
+        // so the expectation is declared on the chain instead.
+        $this->forAll(['times' => Gen::intBetween(-500, -1)])
+            ->runs(200)
+            ->throws(\ValueError::class)
+            ->check(static function (int $times): void {
+                str_repeat('x', $times);
+            });
+    }
+
     /**
      * @param list<int> $values
      * @return list<int>
