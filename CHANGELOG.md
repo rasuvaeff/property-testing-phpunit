@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 — 2026-09-18
 
 - `check()` validates the `forAll()` map before the engine runs, and both
   checks are behaviour changes for a suite that relied on the silence: a
