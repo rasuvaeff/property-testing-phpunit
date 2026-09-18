@@ -17,15 +17,27 @@ Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
 
 - The `check()` closure's **parameter names select the generators** from the
   `forAll()` map — a missing generator for a parameter throws
-  `InvalidArgumentException`.
-- A passing property registers **one assertion** on the running `TestCase`
-  (never risky); every failing outcome throws **one `AssertionFailedError`**
+  `InvalidArgumentException`. `check()` validates the map before the engine
+  runs: a value that is not an `ArbitraryInterface` throws
+  `Property "<name>": forAll() expects array<string, ArbitraryInterface>, got int for key "x"`,
+  a key that is not a parameter throws
+  `Property "<name>": forAll() covers "x", which is not a parameter of the property`
+  — with or without `auto()`.
+- Setters validate at the call, naming the property:
+  `Property "<name>": runs must be greater than or equal to 1` (`runs` ≥ 1,
+  `maxShrinks`/`maxDiscards` ≥ 0, `timeoutMs`/`budgetMs`/`shrinkBudgetMs` ≥ 1);
+  a `path()`/`PROPERTY_PATH` without `seed()`/`PROPERTY_SEED` is refused by
+  `check()` the same way.
+- Every outcome registers **one assertion** on the running `TestCase` — the
+  check is the assertion, so a body without PHPUnit assertions is never risky,
+  passing or failing (only a property whose every run was skipped registers
+  none); every failing outcome throws **one `AssertionFailedError`**
   whose message is the engine's (seed, original/shrunk args, shrink stats) and
   whose `previous` is the engine exception (`PropertyViolationException`,
   `GaveUpException`, `CoverageViolationException`,
   `DeadlineExceededException`, `TimeBudgetExceededException`,
   `ExampleViolationException`, `RegressionViolationException`,
-  `GenerationExhausted`).
+  `GenerationExhaustedException`).
 - `Assume::that(false)` **discards the run** (retried by the engine, budget
   `maxDiscards`, default `runs * 10`) — it never skips the PHPUnit test.
 - An explicit `seed()` **disables regression-corpus replay** for that
@@ -84,13 +96,13 @@ public function output($stdout, $stderr): self;      // redirect reports/trace s
 public function check(\Closure $property): void;     // run the property
 ```
 
-Auto-derivation (`auto()`, requires core ^0.5): every parameter the forAll()
+Auto-derivation (`auto()`, part of the core the package requires): every parameter the forAll()
 map does not cover is derived from the closure's signature via
 Gen::forParameters — the `@param` psalm type from the closure's docblock wins
 over the native type; unreadable types (bare array, mixed, untyped, variadic)
 throw naming the function and parameter. forAll() takes a `[]` default, so a
-fully-typed closure needs no map. With auto a map key that is not a parameter
-is an error. Strictly opt-in, never the default (bare int/float derive their
+fully-typed closure needs no map. A map key that is not a parameter is an
+error, with auto as without. Strictly opt-in, never the default (bare int/float derive their
 full native domain). No PROPERTY_AUTO env variable, deliberately.
 
 ### Example
@@ -125,10 +137,10 @@ final class SortPropertyTest extends TestCase
 |---|---|---|
 | `PROPERTY_RUNS` | positive integer within range (no saturation) | Overrides every property's run count; invalid value throws `InvalidArgumentException` |
 | `PROPERTY_SEED` | integer within range | Seeds properties without an explicit `seed()`; `seed()` wins; invalid value throws |
-| `PROPERTY_VERBOSE` | anything but `''`/`'0'` | Trace: each run's arguments/draws, each accepted shrink step |
+| `PROPERTY_VERBOSE` | `''` = unset; `0`/`false`/`off`/`no` (case-insensitive, trimmed) = off; anything else = on (core 0.9: only `''`/`0` are off) | Trace: each run's arguments/draws, each accepted shrink step |
 | `PROPERTY_DB` | directory path OR `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; parsed by core `CorpusFactory`) | Regression corpus: record on falsification, replay first on the next run, prune on green. A DSN builds a RedisCorpus (ext-redis preferred, else predis; neither installed THROWS) — same document as the directory form, shared between CI and developers |
 | `PROPERTY_PHASES` | `examples,corpus,random,shrink` (comma-separated, case-insensitive) | Stages to run; OVERRIDES `phases()`; unknown name throws |
-| `PROPERTY_DERANDOMIZE` | anything but `''`/`'0'` | Unset seeds derived from the property id; `seed()`/`PROPERTY_SEED` still win |
+| `PROPERTY_DERANDOMIZE` | same switch words as `PROPERTY_VERBOSE` | Unset seeds derived from the property id; `seed()`/`PROPERTY_SEED` still win |
 | `PROPERTY_PATH` | recorded `CounterExample::$path` | Replays that shrink descent; needs the seed of that run; explicit `path()` wins |
 | `PROPERTY_EDGE_CASES` | `mixin` \| `none` (case-insensitive) | Numeric boundary bias; OVERRIDES `edgeCases()`; unknown value throws |
 
@@ -136,8 +148,11 @@ final class SortPropertyTest extends TestCase
 
 `Classify::label()`/`when()`/`cover()` in the body work as in every adapter; a
 passing classified property prints
-`Property "<name>" distribution: label N% (n/checks), …` and a >90% discard
-rate prints a narrowing warning to stderr.
+`Property "<name>" distribution: label N% (n/checks), …` to stdout and a >90%
+discard rate prints a narrowing warning to stderr. Each diagnostic line is
+written as `"\n" . $line . "\n"` — the leading newline keeps it off PHPUnit's
+progress row (the Testo adapter prints without it). Streams and format are
+diagnostics, not a contract; match on the `Property "<name>"` prefix.
 
 ### Internal
 

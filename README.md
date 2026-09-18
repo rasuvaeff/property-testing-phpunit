@@ -114,6 +114,20 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `auto(bool = true)` | Derives generators from the closure's signature for every parameter the `forAll()` map does not cover; the map becomes partial overrides. Off by default, and stays off |
 | `throws(string)` | The exception class every trial must throw — a trial that throws it passes, one that does not (or throws another class) fails and shrinks. The property-level replacement for `expectException()`, which never sees a throw from inside the body |
 
+Every setter validates its argument at the call, with the property's name in
+the message: `runs(0)` throws
+`Property "testSortIsIdempotent": runs must be greater than or equal to 1`
+(the same for `maxShrinks`/`maxDiscards` below `0` and for
+`timeoutMs`/`budgetMs`/`shrinkBudgetMs` below `1`). A `path()` without a
+`seed()` — in either order — or a `PROPERTY_PATH` without a seed is refused by
+`check()` the same way. The `forAll()` map is checked by `check()` too, before
+the engine runs: a value that is not an `ArbitraryInterface` throws
+`Property "…": forAll() expects array<string, ArbitraryInterface>, got int for key "x"`,
+and a key that is not a parameter of the closure throws
+`Property "…": forAll() covers "vlaue", which is not a parameter of the property`
+— with or without `auto()`, because a typoed entry would otherwise run green
+in whatever domain the real parameter has.
+
 ### Auto-derived generators (`auto()`)
 
 When the closure's parameters are fully described by their types, the
@@ -160,9 +174,9 @@ Rules worth knowing — verbatim the Testo adapter's (`#[Property(auto: true)]`)
 - A type the deriver cannot read (a bare `array`, `mixed`, an untyped or
   variadic parameter) fails with an error naming the function and the
   parameter — never a silently widened guess.
-- With `auto()` a `forAll()` key that is not a parameter of the closure is an
-  error: merge semantics would otherwise silently replace a typoed entry with
-  a signature-derived generator.
+- A `forAll()` key that is not a parameter of the closure is an error, with
+  `auto()` as without it; under `auto()` merge semantics would otherwise
+  silently replace a typoed entry with a signature-derived generator.
 - A full map plus `auto()` is legal — auto derives nothing.
 - There is deliberately no `PROPERTY_AUTO` environment variable: the
   environment dials the suite, while `auto()` changes what one property's
@@ -225,7 +239,11 @@ would otherwise falsify every run without a word of explanation.
 
 ### How results map onto PHPUnit
 
-- A **pass** counts one assertion — the test is never marked risky.
+- The check **is** the assertion: every outcome counts one assertion on the
+  running `TestCase`, so a property whose body asserts nothing is never marked
+  risky — neither when it passes nor when it is falsified (a failing property
+  is reported once, as a failure). Only a property whose every run was skipped
+  registers none: that test is skipped, not checked.
 - Every **failing outcome** (falsified, gave up, unmet coverage, deadline,
   budget, generation failure, failing example, replayed regression) surfaces
   as **one `AssertionFailedError`** whose message is the engine's own — seed,
@@ -261,10 +279,10 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 |---|---|
 | `PROPERTY_RUNS` | Positive integer that overrides every property's run count (dial runs up in CI) |
 | `PROPERTY_SEED` | Integer seed for any property without an explicit `seed()` (replay a whole suite). An explicit `seed()` still wins |
-| `PROPERTY_VERBOSE` | Any value except `''`/`'0'` logs every run's generated arguments and each accepted shrink step |
+| `PROPERTY_VERBOSE` | Enables the trace of every run's generated arguments and each accepted shrink step. `''` is unset; `0`, `false`, `off`, `no` (case-insensitive, trimmed) are off; anything else is on. Core 0.9 reads only `''`/`0` as off |
 | `PROPERTY_DB` | Directory path enabling the regression corpus, or a `redis://host[:port][/db][?prefix=key-prefix]` DSN (`rediss://` for TLS) for a corpus shared between CI and developers. Unset means off, nothing is written |
 | `PROPERTY_PHASES` | Comma-separated stage list (`examples,corpus,random,shrink`, case-insensitive) that overrides `phases()` — an unknown name throws rather than skipping a stage. `examples,corpus` is the fast pull-request gate |
-| `PROPERTY_DERANDOMIZE` | Any value except `''`/`'0'` derives every unset seed from the property id, making a whole suite reproducible without editing it |
+| `PROPERTY_DERANDOMIZE` | Derives every unset seed from the property id, making a whole suite reproducible without editing it. Same switch words as `PROPERTY_VERBOSE`: `''` is unset, `0`/`false`/`off`/`no` are off, anything else is on |
 | `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins. It describes one failure, so run it with `--filter` on that one test — every other property would report the path as stale |
 | `PROPERTY_EDGE_CASES` | `mixin` or `none` (case-insensitive) — the numeric boundary bias for the whole suite, overriding `edgeCases()`. An unknown value throws |
 
@@ -310,6 +328,15 @@ Property "testSortKeepsEveryElement" distribution: long 39% (77/200), short 61% 
 
 A property that discards more than 90% of its attempts (via `Assume::that()`)
 gets a warning suggesting narrower generators.
+
+These diagnostics — the distribution on stdout, the discard warning and the
+unstable-id warnings on stderr — are written straight to the process streams
+while PHPUnit is printing its progress dots, so each one starts with a newline
+of its own (`\n` + line + `\n`) rather than being glued to the end of
+`....F..`. The Testo adapter, which has no progress row, prints the same lines
+without the leading newline. The streams and the exact format are diagnostics
+for a human reading the terminal, not a contract: grep for the
+`Property "<name>"` prefix, not for a byte offset.
 
 ### Why no `#[Property]` attribute?
 

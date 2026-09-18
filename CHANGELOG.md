@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+- `check()` validates the `forAll()` map before the engine runs, and both
+  checks are behaviour changes for a suite that relied on the silence: a
+  value that is not an `ArbitraryInterface` is rejected with
+  `Property "<name>": forAll() expects array<string, ArbitraryInterface>, got int for key "x"`
+  instead of failing inside the runner as a method call on a non-object with
+  neither the key nor the property in the message; and a key that is not a
+  parameter of the closure is rejected with or without `auto()` — before,
+  only `auto()` checked it and a typoed entry ran green in whatever domain
+  the real parameter had (#49). Message shapes follow the Testo adapter's.
+- Every outcome of a property registers one assertion on the running
+  `TestCase`, not only a pass: a falsified property whose body performed no
+  PHPUnit assertion was reported twice, as Failed and as Risky ("This test
+  did not perform any assertions"). A property whose every run was skipped
+  still registers none — that test is skipped, not checked (#50).
+- The chain validates at the setters, naming the property: `runs(0)` throws
+  `Property "<name>": runs must be greater than or equal to 1` at the call,
+  and so do `maxShrinks`/`maxDiscards` below `0` and
+  `timeoutMs`/`budgetMs`/`shrinkBudgetMs` below `1`. A `path()` or
+  `PROPERTY_PATH` without a `seed()` or `PROPERTY_SEED` is refused by
+  `check()` the same way (`path()` and `seed()` may come in either order, so
+  the setter cannot). The engine used to reject the same values with the
+  same bounds, but without saying which property.
+- The distribution report, the discard warning and the unstable-id warnings
+  are written as `"\n" . $line . "\n"`: PHPUnit prints its progress dots on
+  the same terminal, and a line that started where the cursor was ended up
+  glued to `....F..`. The line content is unchanged and still byte-identical
+  to the Testo adapter's; the leading newline is a PHPUnit-only asymmetry
+  recorded in `AGENTS.md`. The `VerboseListener` trace is untouched.
+- Documentation catches up with core 0.10 (README ×2, `llms.txt`,
+  `AGENTS.md`): `PROPERTY_VERBOSE`/`PROPERTY_DERANDOMIZE` are off on `0`,
+  `false`, `off`, `no` (case-insensitive, trimmed), not only on `''`/`0`;
+  `GenerationExhausted` is `GenerationExhaustedException`; `auto()` no
+  longer claims to require core `^0.5`. `EnvironmentParityTest` pins the
+  off words (skipped under core 0.9, where only `''`/`0` are off).
+- `psalm.xml` lists `TestCase::dataName()` next to `TestCase::name()`; the
+  comment records that Psalm 6.17 resolves neither call from inside the
+  trait, so both entries document the boundary rather than silence anything.
+
 ## 0.8.0 — 2026-09-10
 
 - Added `PropertyCheck::throws(string $exceptionClass)`: the property-level

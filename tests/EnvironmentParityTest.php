@@ -7,6 +7,7 @@ namespace Rasuvaeff\PropertyTesting\PhpUnit\Tests;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\SkippedWithMessageException;
 use PHPUnit\Framework\TestCase;
 use Rasuvaeff\PropertyTesting\Classify;
@@ -20,6 +21,7 @@ use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\RegressionViolationException;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
+use Rasuvaeff\PropertyTesting\Runner\EnvironmentOverrides;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
 
 /**
@@ -389,6 +391,51 @@ final class EnvironmentParityTest extends TestCase
         self::assertNotSame($this->resolvedSeed(), $this->resolvedSeed());
     }
 
+    #[DataProvider('offWordProvider')]
+    public function testPropertyDerandomizeIsOffForEveryOffWord(string $word): void
+    {
+        $this->requireOffWords();
+        putenv('PROPERTY_DERANDOMIZE=' . $word);
+
+        self::assertNotSame($this->resolvedSeed(), $this->resolvedSeed());
+    }
+
+    #[DataProvider('offWordProvider')]
+    public function testPropertyVerboseIsOffForEveryOffWord(string $word): void
+    {
+        $this->requireOffWords();
+        putenv('PROPERTY_VERBOSE=' . $word);
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(3)
+            ->seed(9)
+            ->output($stdout, $stderr)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+
+        rewind($stdout);
+
+        self::assertSame('', (string) stream_get_contents($stdout));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function offWordProvider(): iterable
+    {
+        // The words core's EnvironmentOverrides::flag() reads as "off" since
+        // 0.10, case-insensitive and trimmed; '' is "unset", not "off".
+        yield '0' => ['0'];
+        yield 'false' => ['false'];
+        yield 'off' => ['off'];
+        yield 'no' => ['no'];
+        yield 'NO with spaces' => [' NO '];
+    }
+
     public function testAnEmptyPropertyPathIsNotAPath(): void
     {
         // '' means unset for every variable in this table; handing it to the
@@ -464,6 +511,19 @@ final class EnvironmentParityTest extends TestCase
         }
     }
 
+    public function testPropertyPathWithoutASeedIsRejectedNamingTheProperty(): void
+    {
+        // An env path and no seed anywhere: the adapter refuses it with the
+        // property's name, before the engine's nameless refusal.
+        putenv('PROPERTY_PATH=value:1');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Property "testPropertyPathWithoutASeedIsRejectedNamingTheProperty": replaying a shrink path requires an explicit seed');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+            ->check(static function (int $value): void {});
+    }
+
     public function testAClosureDerivedIdIsReportedOnStderrOnceWhenACorpusIsInUse(): void
     {
         $stderr = fopen('php://memory', 'w+');
@@ -492,13 +552,14 @@ final class EnvironmentParityTest extends TestCase
         rewind($stderr);
         $warning = (string) stream_get_contents($stderr);
 
-        // The whole line, newline included: this is machine-greppable CLI
-        // output, and "contains" would not notice it losing its terminator.
+        // The whole line, both newlines included: this is machine-greppable
+        // CLI output, and "contains" would not notice it losing its terminator
+        // — or the leading newline that keeps it off PHPUnit's progress row.
         self::assertMatchesRegularExpression(
-            '/^Property id "[^"]*\{closure[^"]*" comes from a closure and is not stable: .+pass an explicit property id\n$/s',
+            '/^\nProperty id "[^"]*\{closure[^"]*" comes from a closure and is not stable: .+pass an explicit property id\n$/s',
             $warning,
         );
-        self::assertSame(1, substr_count($warning, "\n"));
+        self::assertSame(2, substr_count($warning, "\n"));
     }
 
     public function testAnUnstableIdIsNotReportedWithoutACorpus(): void
@@ -568,7 +629,7 @@ final class EnvironmentParityTest extends TestCase
         $warning = (string) stream_get_contents($stderr);
 
         self::assertMatchesRegularExpression(
-            '/^Property id "[^"]*::checkViaHelper" was derived from a helper, not the test method that ran, .*->id\(\)\n$/s',
+            '/^\nProperty id "[^"]*::checkViaHelper" was derived from a helper, not the test method that ran, .*->id\(\)\n$/s',
             $warning,
         );
     }
@@ -707,6 +768,17 @@ final class EnvironmentParityTest extends TestCase
      * The seed the engine actually ran with, as the PropertyStarted event
      * reports it — the one observable that says what a seed knob decided.
      */
+    /**
+     * Core 0.9 reads only '' and '0' as off; the words are a 0.10 contract,
+     * and this package still accepts ^0.9 (the prefer-lowest job runs it).
+     */
+    private function requireOffWords(): void
+    {
+        if (EnvironmentOverrides::flag('off') !== false) {
+            self::markTestSkipped('property-testing-core 0.10 is needed for the off words');
+        }
+    }
+
     private function resolvedSeed(?bool $derandomize = null): int
     {
         $listener = new RecordingListener();

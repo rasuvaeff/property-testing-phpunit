@@ -143,8 +143,10 @@ final class AdapterDetailsTest extends TestCase
         rewind($stderr);
 
         // "always" hits every check, so it leads regardless of insertion
-        // order; percentages are integer-rounded of count/checks.
-        self::assertSame(1, preg_match('/^Property "\w+" distribution: always 100% \(50\/50\), rare \d+% \(\d+\/50\)\n$/', $report));
+        // order; percentages are integer-rounded of count/checks. The line
+        // starts on a line of its own — PHPUnit's progress dots own the
+        // current one — and ends with exactly one newline.
+        self::assertSame(1, preg_match('/^\nProperty "\w+" distribution: always 100% \(50\/50\), rare \d+% \(\d+\/50\)\n$/', $report));
         // A clean pass warns about nothing.
         self::assertSame('', (string) stream_get_contents($stderr));
     }
@@ -192,7 +194,7 @@ final class AdapterDetailsTest extends TestCase
         rewind($stdout);
 
         self::assertSame(
-            'Property "testTheDistributionIsSortedByCountNotInsertionOrder" distribution: often 67% (2/3), once 33% (1/3)' . "\n",
+            "\n" . 'Property "testTheDistributionIsSortedByCountNotInsertionOrder" distribution: often 67% (2/3), once 33% (1/3)' . "\n",
             (string) stream_get_contents($stdout),
         );
     }
@@ -260,7 +262,7 @@ final class AdapterDetailsTest extends TestCase
         rewind($stderr);
 
         self::assertSame(
-            'Property "testTheDiscardWarningPercentageIsRounded" discarded 29 of 30 attempt(s) (97%); consider narrowing the generators' . "\n",
+            "\n" . 'Property "testTheDiscardWarningPercentageIsRounded" discarded 29 of 30 attempt(s) (97%); consider narrowing the generators' . "\n",
             (string) stream_get_contents($stderr),
         );
     }
@@ -282,7 +284,7 @@ final class AdapterDetailsTest extends TestCase
         rewind($stderr);
 
         self::assertSame(
-            'Property "testTheDiscardWarningLineIsExact" discarded 16 of 17 attempt(s) (94%); consider narrowing the generators' . "\n",
+            "\n" . 'Property "testTheDiscardWarningLineIsExact" discarded 16 of 17 attempt(s) (94%); consider narrowing the generators' . "\n",
             (string) stream_get_contents($stderr),
         );
     }
