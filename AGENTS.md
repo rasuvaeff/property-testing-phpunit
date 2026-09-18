@@ -14,10 +14,14 @@ The PHPUnit adapter of the property-testing family — a thin layer over
   resolves the chain and the environment into a core
   `PropertyDefinition`/`PropertyConfig`/`Corpus`, executes the closure through
   `PhpUnitTrialExecutor` (`@internal`, since 0.6.0), and maps the structured `PropertyResult` onto
-  PHPUnit — a pass registers one assertion via
-  `TestCase::addToAssertionCount()`, every failing outcome becomes one
-  `AssertionFailedError` with the engine failure as `previous`. It also prints
-  the distribution report and the >90%-discard warning. `throws(string)` is
+  PHPUnit — every outcome registers one assertion via
+  `TestCase::addToAssertionCount()` (the check is the assertion, pass or
+  fail; only an all-runs-skipped property registers none), every failing
+  outcome becomes one `AssertionFailedError` with the engine failure as
+  `previous`. It validates the chain at the setters and the `forAll()` map
+  at `check()`, naming the property in every message, before the engine's
+  nameless refusal would. It also prints the distribution report and the
+  >90%-discard warning. `throws(string)` is
   the property-level replacement for `expectException()` (which never sees a
   throw from inside the body): the executor turns a throw of the expected
   class into a pass and a silent return into the failure "Expected \<class\>
@@ -100,11 +104,11 @@ parity is golden rule 3.
 |---|---|---|---|---|
 | `PROPERTY_RUNS` | Always (`false`/`''` = unset) | `/^\d+\z/`, `>= 1` | Overrides every property's run count, including `runs()` | `InvalidArgumentException` |
 | `PROPERTY_SEED` | Only when `seed()` was not called (explicit seed wins) | `/^-?\d+\z/` | Seeds every unseeded property; unset means a random seed per property | `InvalidArgumentException` |
-| `PROPERTY_VERBOSE` | Always | Any value except `''` and `'0'` enables | Attaches `VerboseListener`: every run's arguments/draws and each accepted shrink step | n/a (falsy values disable) |
+| `PROPERTY_VERBOSE` | Always | `''` = unset; `0`, `false`, `off`, `no` (case-insensitive, trimmed) = off; anything else enables (core `EnvironmentOverrides::flag()`; core 0.9 knows only `''`/`0`) | Attaches `VerboseListener`: every run's arguments/draws and each accepted shrink step | n/a (off words disable) |
 | `PROPERTY_DB` | Always (`false`/`''` = off, nothing written) | Directory path (created on demand) **or** `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; core `CorpusFactory`) | Regression corpus via core's `CorpusFactory::fromDsn()` (`CorpusFromEnv` was removed in 0.6.0): a path builds a `FilesystemCorpus`, a DSN a `RedisCorpus` (ext-redis preferred, else predis). An explicit `seed()` disables replay for that property | `InvalidArgumentException` — an unusable DSN, or no Redis client installed. Never a silent fall back to the filesystem |
 | `PROPERTY_PHASES` | Always (`false`/`''` = unset) | Comma-separated phase names, case-insensitive: `examples`, `corpus`, `random`, `shrink` | Stages of every run, in run order — **overrides** `phases()` | `InvalidArgumentException` naming the accepted values |
-| `PROPERTY_DERANDOMIZE` | Always | Any value except `''` and `'0'` enables | Derives every unset seed from the property id — **overrides** `derandomize()` | n/a (falsy values disable) |
-| `PROPERTY_PATH` | Only when `path()` was not called (explicit path wins) | A recorded `CounterExample::$path` | Replays that shrink descent instead of searching for it; needs the seed of the run that produced it | engine rejects a path that would be a silent no-op |
+| `PROPERTY_DERANDOMIZE` | Always | Same words as `PROPERTY_VERBOSE` | Derives every unset seed from the property id — **overrides** `derandomize()` | n/a (off words disable) |
+| `PROPERTY_PATH` | Only when `path()` was not called (explicit path wins) | A recorded `CounterExample::$path` | Replays that shrink descent instead of searching for it; needs the seed of the run that produced it | `check()` rejects a path without a seed (`seed()` or `PROPERTY_SEED`) naming the property; the engine rejects every other path that would be a silent no-op |
 | `PROPERTY_EDGE_CASES` | Always (`false`/`''` = unset) | `mixin` or `none`, case-insensitive, trimmed | Numeric boundary bias for every run — **overrides** `edgeCases()` | `InvalidArgumentException` naming the accepted values |
 
 **Diagnostics print in a fixed order: the discard warning first, then the
@@ -113,15 +117,28 @@ log that merges the two streams must not show them in different orders. The
 order is pinned here and in the Testo adapter's `AGENTS.md`; changing it means
 changing both.
 
-**Two framework asymmetries the parity rule does not cover.**
+**Three framework asymmetries the parity rule does not cover.**
 
 - *Risky per run.* Testo can mark a single run risky; PHPUnit signals risky at
   the test level, so there is no per-run equivalent to mirror.
-  `PropertyCheck` compensates by counting one assertion for a property that
-  passed (`$this->testCase->addToAssertionCount(1)`), which is what keeps a
-  property whose body asserts nothing on some runs out of the risky bucket.
-  `PhpUnitTrialExecutor` only counts the skipped runs; the assertion is the
-  check's, because it is one per property, not one per run.
+  `PropertyCheck` compensates by counting one assertion for every property
+  that ran (`$this->testCase->addToAssertionCount(1)`, before the verdict),
+  which is what keeps a property whose body asserts nothing out of the risky
+  bucket — on a pass, and on a failure, where PHPUnit would otherwise report
+  the same test as Failed *and* Risky. A property whose every run was skipped
+  rethrows the skip before that line and registers nothing: a skipped test is
+  the environment's verdict, not a check. `PhpUnitTrialExecutor` only counts
+  the skipped runs; the assertion is the check's, because it is one per
+  property, not one per run.
+- *A leading newline on every diagnostic line.* PHPUnit prints its progress
+  dots on the same terminal while a property runs, so `PropertyCheck::diagnose()`
+  writes `"\n" . $line . "\n"`: the distribution, the discard warning and the
+  unstable-id warnings all start on a line of their own instead of gluing to
+  `....F..`. Testo has no progress row and prints the same lines without it.
+  The line *content* stays byte-identical across adapters; only the leading
+  `\n` differs, and the exact-string tests in `AdapterDetailsTest` pin both
+  newlines. `VerboseListener` is deliberately left alone: a trace is a wall of
+  lines already, and double-spacing it would help nobody.
 - *Data-set naming.* The corpus id of a data-provider case reads
   `Class::method with data set "0"`, where PHPUnit's own output prints `#0` for
   a numeric key. Deliberate: this string is a corpus key, and respelling it
@@ -147,12 +164,16 @@ replay (`PropertyDefinition::$replayRegressions = false`), the **env**
   `PHPUnit\Framework\AssertionFailedError` (the documented type a third-party
   integration throws to report a FAILURE — an arbitrary exception would
   surface as an ERROR) and `TestCase::addToAssertionCount()` (the only way a
-  passing property is an assertion rather than a risky test). The first point
+  property that ran is an assertion rather than a risky test). The first point
   needs two XML entries (`InternalClass` on the class, `InternalMethod` on its
   constructor) — see the comment in `psalm.xml` for the non-obvious part:
   the constructor suppression must name `AssertionFailedError`, not the
   parent `Exception` class that Psalm's own error text names as the
-  constructor's declarer. Do not widen this list casually, and never add
+  constructor's declarer. The trait's own two calls, `TestCase::name()` and
+  `TestCase::dataName()`, are listed as well, but Psalm 6.17 does not resolve
+  `$this` inside the trait to `TestCase` and reports nothing for either with
+  or without the entries (verified 2026-09-18) — they document the boundary
+  for a Psalm that will. Do not widen this list casually, and never add
   `@psalm-suppress` in code.
 - **`forAll()` reads the calling test method's name via `debug_backtrace`** —
   it becomes the property id (`Class::method`) that keys events and the
