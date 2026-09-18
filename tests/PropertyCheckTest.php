@@ -699,6 +699,287 @@ final class PropertyCheckTest extends TestCase
         }
     }
 
+    public function testAMapKeyThatIsNotAParameterIsRejectedWithoutAutoToo(): void
+    {
+        // Without auto the engine would simply never read the entry — the
+        // typo runs green in whatever domain "value" happens to have.
+        try {
+            $this->forAll(['vlaue' => Gen::constant(7), 'value' => Gen::constant(7)])
+                ->check(static function (int $value): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                'Property "testAMapKeyThatIsNotAParameterIsRejectedWithoutAutoToo": forAll() covers "vlaue", which is not a parameter of the property',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAListInsteadOfAMapIsRejectedByItsIntegerKey(): void
+    {
+        try {
+            $this->forAll([Gen::constant(7)])
+                ->check(static function (int $value): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertStringContainsString('forAll() covers "0", which is not a parameter', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @param array<array-key, mixed> $generators
+     */
+    #[DataProvider('nonArbitraryValueProvider')]
+    public function testAValueThatIsNotAnArbitraryIsRejectedNamingTheKeyAndTheType(array $generators, string $expected): void
+    {
+        // Before this check the engine failed on `generate()` of a non-object,
+        // naming neither the key nor the property.
+        try {
+            $this->forAll($generators)
+                ->check(static function (int $value): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                'Property "testAValueThatIsNotAnArbitraryIsRejectedNamingTheKeyAndTheType": ' . $expected,
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed>, string}>
+     */
+    public static function nonArbitraryValueProvider(): iterable
+    {
+        yield 'an int' => [['value' => 5], 'forAll() expects array<string, ArbitraryInterface>, got int for key "value"'];
+        yield 'a closure' => [['value' => static fn(): int => 5], 'forAll() expects array<string, ArbitraryInterface>, got Closure for key "value"'];
+        yield 'null' => [['value' => null], 'forAll() expects array<string, ArbitraryInterface>, got null for key "value"'];
+        // The value is checked before the key: a wrong value under a wrong
+        // key is reported as the value, the way Testo reports it.
+        yield 'a string under a typoed key' => [['vlaue' => 'Gen::int()'], 'forAll() expects array<string, ArbitraryInterface>, got string for key "vlaue"'];
+    }
+
+    public function testAValueIsRejectedEvenUnderAuto(): void
+    {
+        try {
+            $this->forAll(['value' => 5])
+                ->auto()
+                ->check(static function (int $value): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertStringContainsString('got int for key "value"', $exception->getMessage());
+        }
+    }
+
+    public function testAFalsifiedPropertyStillCountsItsOneAssertion(): void
+    {
+        $before = $this->numberOfAssertionsPerformed();
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->seed(42)
+                ->check(static function (int $value): void {
+                    // No PHPUnit assertion in the body: without the check's
+                    // own assertion this test would be Failed and Risky.
+                    if ($value >= 100) {
+                        throw new \RuntimeException('too big');
+                    }
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+            // Mid-test the counter reflects only addToAssertionCount(): the
+            // one the check registered, on the failing path as on the passing.
+            self::assertSame($before + 1, $this->numberOfAssertionsPerformed());
+        }
+    }
+
+    public function testAPropertyThatGaveUpStillCountsItsOneAssertion(): void
+    {
+        $devnull = fopen('php://memory', 'r+');
+        \assert(\is_resource($devnull));
+        $before = $this->numberOfAssertionsPerformed();
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(5)
+                ->maxDiscards(3)
+                ->seed(1)
+                ->output($devnull, $devnull)
+                ->check(static function (int $value): void {
+                    Assume::that(condition: false);
+                });
+
+            self::fail('The property should have given up');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(GaveUpException::class, $failure->getPrevious());
+            self::assertSame($before + 1, $this->numberOfAssertionsPerformed());
+        }
+    }
+
+    public function testAPropertyWhoseEveryRunIsSkippedCountsNoAssertion(): void
+    {
+        // A skipped test is the environment's verdict, not a check that ran;
+        // it gets no assertion, so the skip is reported as a skip.
+        $before = $this->numberOfAssertionsPerformed();
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(3)
+                ->seed(1)
+                ->check(static function (int $value): void {
+                    self::markTestSkipped('no redis here');
+                });
+
+            self::fail('The property should have been skipped');
+        } catch (SkippedWithMessageException) {
+            self::assertSame($before, $this->numberOfAssertionsPerformed());
+        }
+    }
+
+    /**
+     * @param \Closure(PropertyCheck): PropertyCheck $configure
+     */
+    #[DataProvider('rejectedSetterValueProvider')]
+    public function testASetterRejectsAValueBelowItsMinimumNamingTheProperty(\Closure $configure, string $expected): void
+    {
+        // The engine rejects the same values, but a dozen properties in one
+        // class need to know which chain was wrong — and at the setter, not
+        // at check().
+        $check = $this->forAll(['value' => Gen::intBetween(0, 10)]);
+
+        try {
+            $configure($check);
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                'Property "testASetterRejectsAValueBelowItsMinimumNamingTheProperty": ' . $expected,
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(PropertyCheck): PropertyCheck, string}>
+     */
+    public static function rejectedSetterValueProvider(): iterable
+    {
+        yield 'runs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->runs(0), 'runs must be greater than or equal to 1'];
+        yield 'runs(-1)' => [static fn(PropertyCheck $check): PropertyCheck => $check->runs(-1), 'runs must be greater than or equal to 1'];
+        yield 'maxShrinks(-1)' => [static fn(PropertyCheck $check): PropertyCheck => $check->maxShrinks(-1), 'maxShrinks must be greater than or equal to 0'];
+        yield 'maxDiscards(-1)' => [static fn(PropertyCheck $check): PropertyCheck => $check->maxDiscards(-1), 'maxDiscards must be greater than or equal to 0'];
+        yield 'timeoutMs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->timeoutMs(0), 'timeoutMs must be greater than or equal to 1'];
+        yield 'budgetMs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->budgetMs(0), 'budgetMs must be greater than or equal to 1'];
+        yield 'shrinkBudgetMs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->shrinkBudgetMs(0), 'shrinkBudgetMs must be greater than or equal to 1'];
+    }
+
+    public function testEverySetterAcceptsItsMinimum(): void
+    {
+        $listener = new RecordingListener();
+
+        // runs(1) is one run; maxShrinks(0) is "no shrinking"; the rest are
+        // one millisecond — every boundary is a legal value, not an error.
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(1)
+            ->maxShrinks(0)
+            ->maxDiscards(0)
+            ->timeoutMs(1)
+            ->budgetMs(1)
+            ->seed(1)
+            ->listeners($listener)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+
+        self::assertSame(1, $listener->count(RunStarted::class));
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(1)
+            ->shrinkBudgetMs(1)
+            ->seed(1)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+    }
+
+    public function testASetterErrorLeavesTheEngineMessageOutOfIt(): void
+    {
+        // One error, the adapter's, with the property's name — not the engine's
+        // nameless one wrapped around it.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])->runs(0);
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertNull($exception->getPrevious());
+            self::assertStringNotContainsString('Runs must be', $exception->getMessage());
+        }
+    }
+
+    public function testAPathWithoutASeedIsRejectedAtCheckNamingTheProperty(): void
+    {
+        // path() and seed() may come in either order, so the check lives in
+        // check() — before the engine's own, nameless refusal.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->path('value:1')
+                ->check(static function (int $value): void {});
+
+            self::fail('Expected an InvalidArgumentException');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                'Property "testAPathWithoutASeedIsRejectedAtCheckNamingTheProperty": replaying a shrink path requires an explicit seed — seed() or PROPERTY_SEED',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAPathBeforeItsSeedIsAccepted(): void
+    {
+        // The order of the two setters must not matter — which is why the
+        // seed requirement is not checked inside path().
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->runs(100)
+                ->path($this->pathOfAFailure())
+                ->seed(4242)
+                ->check(static function (int $value): void {
+                    self::assertLessThan(100, $value);
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+        }
+    }
+
+    private function pathOfAFailure(): string
+    {
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10_000)])
+                ->id(self::class . '::pathOfAFailure')
+                ->runs(100)
+                ->seed(4242)
+                ->check(static function (int $value): void {
+                    self::assertLessThan(100, $value);
+                });
+        } catch (AssertionFailedError $failure) {
+            $previous = $failure->getPrevious();
+            \assert($previous instanceof PropertyViolationException);
+
+            return $previous->getCounterExample()->path;
+        }
+
+        self::fail('The property should have been falsified');
+    }
+
     public function testWithoutAutoTheForAllMapIsUsedVerbatim(): void
     {
         // auto stays opt-in: no derivation happens unless auto() was called,

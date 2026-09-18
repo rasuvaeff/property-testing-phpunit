@@ -90,7 +90,9 @@ final class PropertyCheck
     private ?Clock $clock = null;
 
     /**
-     * @param array<string, ArbitraryInterface> $generators
+     * @param array<array-key, mixed> $generators The {@see PropertyTesting::forAll()} map as
+     *        written; {@see check()} rejects anything in it that is not an
+     *        {@see ArbitraryInterface} keyed by a parameter name.
      *
      * @internal Constructed by {@see PropertyTesting::forAll()}.
      */
@@ -172,6 +174,7 @@ final class PropertyCheck
       */
     public function runs(int $runs): self
     {
+        $this->assertAtLeast('runs', $runs, 1);
         $this->runs = $runs;
 
         return $this;
@@ -193,6 +196,7 @@ final class PropertyCheck
      */
     public function maxShrinks(int $maxShrinks): self
     {
+        $this->assertAtLeast('maxShrinks', $maxShrinks, 0);
         $this->maxShrinks = $maxShrinks;
 
         return $this;
@@ -203,6 +207,7 @@ final class PropertyCheck
      */
     public function maxDiscards(int $maxDiscards): self
     {
+        $this->assertAtLeast('maxDiscards', $maxDiscards, 0);
         $this->maxDiscards = $maxDiscards;
 
         return $this;
@@ -213,6 +218,7 @@ final class PropertyCheck
      */
     public function timeoutMs(int $timeoutMs): self
     {
+        $this->assertAtLeast('timeoutMs', $timeoutMs, 1);
         $this->timeoutMs = $timeoutMs;
 
         return $this;
@@ -223,6 +229,7 @@ final class PropertyCheck
      */
     public function budgetMs(int $budgetMs): self
     {
+        $this->assertAtLeast('budgetMs', $budgetMs, 1);
         $this->budgetMs = $budgetMs;
 
         return $this;
@@ -249,6 +256,7 @@ final class PropertyCheck
      */
     public function shrinkBudgetMs(int $shrinkBudgetMs): self
     {
+        $this->assertAtLeast('shrinkBudgetMs', $shrinkBudgetMs, 1);
         $this->shrinkBudgetMs = $shrinkBudgetMs;
 
         return $this;
@@ -300,7 +308,8 @@ final class PropertyCheck
      * Replays the shrink descent of an earlier failure, as reported by
      * `CounterExample::$path`, instead of searching for it again. It needs the
      * seed of the run that produced it — the steps mean nothing against
-     * another one.
+     * another one — so {@see check()} refuses a path without a {@see seed()}
+     * or a `PROPERTY_SEED`.
      */
     public function path(string $path): self
     {
@@ -398,6 +407,19 @@ final class PropertyCheck
             $reflection->getParameters(),
         );
 
+        $seed = $this->seed ?? EnvironmentOverrides::seed(getenv('PROPERTY_SEED'));
+        $path = $this->path ?? EnvironmentOverrides::string(getenv('PROPERTY_PATH'));
+
+        if ($path !== null && $seed === null) {
+            // The engine refuses this too, but without the property's name —
+            // and this is the one chain error that cannot be caught in a
+            // setter, because path() and seed() may come in either order.
+            throw new \InvalidArgumentException(sprintf(
+                'Property "%s": replaying a shrink path requires an explicit seed — seed() or PROPERTY_SEED',
+                $this->name,
+            ));
+        }
+
         $definition = new PropertyDefinition(
             id: $this->id,
             name: $this->name,
@@ -405,7 +427,7 @@ final class PropertyCheck
             parameterNames: $parameterNames,
             config: new PropertyConfig(
                 runs: EnvironmentOverrides::runs(getenv('PROPERTY_RUNS')) ?? $this->runs ?? 100,
-                seed: $this->seed ?? EnvironmentOverrides::seed(getenv('PROPERTY_SEED')),
+                seed: $seed,
                 maxShrinks: $this->maxShrinks,
                 maxDiscards: $this->maxDiscards,
                 timeoutMs: $this->timeoutMs,
@@ -418,7 +440,7 @@ final class PropertyCheck
                 // specific failure and yields to the one written down.
                 phases: EnvironmentOverrides::phases(getenv('PROPERTY_PHASES')) ?? $this->phases,
                 derandomize: EnvironmentOverrides::flag(getenv('PROPERTY_DERANDOMIZE')) ?? $this->derandomize ?? false,
-                path: $this->path ?? EnvironmentOverrides::string(getenv('PROPERTY_PATH')),
+                path: $path,
                 edgeCases: EnvironmentOverrides::edgeCases(getenv('PROPERTY_EDGE_CASES')) ?? $this->edgeCases ?? EdgeCases::Mixin,
             ),
             examples: $this->examples,
@@ -468,11 +490,14 @@ final class PropertyCheck
             $this->reportClassifications($statistics);
         }
 
+        // The check is the assertion, whichever way it went: counted before
+        // the verdict, so a falsified property whose body asserted nothing is
+        // reported once, as a failure, not a second time as risky.
+        $this->testCase->addToAssertionCount(1);
+
         $failure = $result->failure();
 
         if (!$failure instanceof \Throwable) {
-            $this->testCase->addToAssertionCount(1);
-
             return;
         }
 
@@ -480,13 +505,17 @@ final class PropertyCheck
     }
 
     /**
-     * The generators the property runs with: verbatim the {@see forAll()} map,
-     * or — under {@see auto()} — that map as overrides with every uncovered
+     * The generators the property runs with: the {@see forAll()} map, or —
+     * under {@see auto()} — that map as overrides with every uncovered
      * parameter derived from the closure's signature. The derivation errors are
-     * {@see Gen::forParameters()}'s own, naming the function and the parameter;
-     * a map key that is not a parameter is rejected here, because merge
-     * semantics would otherwise silently replace a typoed entry with a
-     * signature-derived generator.
+     * {@see Gen::forParameters()}'s own, naming the function and the parameter.
+     *
+     * The map is checked here, before the engine sees it, because the engine
+     * names neither the key nor the property: a value that is not an
+     * {@see ArbitraryInterface} would fail inside the runner as a call on a
+     * non-object, and a key that is not a parameter would be ignored — a
+     * typoed entry running green in the wrong domain, or under auto silently
+     * replaced by a signature-derived generator.
      *
      * @param list<string> $parameterNames
      *
@@ -494,13 +523,23 @@ final class PropertyCheck
      */
     private function resolveGenerators(\ReflectionFunction $property, array $parameterNames): array
     {
-        if (!$this->auto) {
-            return $this->generators;
-        }
-
         $parameters = array_flip($parameterNames);
 
-        foreach (array_keys($this->generators) as $name) {
+        /** @var array<string, ArbitraryInterface> $generators */
+        $generators = [];
+
+        foreach ($this->generators as $name => $generator) {
+            $name = (string) $name;
+
+            if (!$generator instanceof ArbitraryInterface) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Property "%s": forAll() expects array<string, ArbitraryInterface>, got %s for key "%s"',
+                    $this->name,
+                    get_debug_type($generator),
+                    $name,
+                ));
+            }
+
             if (!isset($parameters[$name])) {
                 throw new \InvalidArgumentException(sprintf(
                     'Property "%s": forAll() covers "%s", which is not a parameter of the property',
@@ -508,9 +547,31 @@ final class PropertyCheck
                     $name,
                 ));
             }
+
+            $generators[$name] = $generator;
         }
 
-        return Gen::forParameters($property, $this->generators);
+        if (!$this->auto) {
+            return $generators;
+        }
+
+        return Gen::forParameters($property, $generators);
+    }
+
+    /**
+     * The engine rejects the same value, but its message names no property;
+     * a chain of a dozen properties in one class needs to say which one.
+     */
+    private function assertAtLeast(string $knob, int $value, int $minimum): void
+    {
+        if ($value < $minimum) {
+            throw new \InvalidArgumentException(sprintf(
+                'Property "%s": %s must be greater than or equal to %d',
+                $this->name,
+                $knob,
+                $minimum,
+            ));
+        }
     }
 
     /**
@@ -539,7 +600,7 @@ final class PropertyCheck
             );
         }
 
-        fwrite($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)) . "\n");
+        $this->diagnose($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)));
     }
 
     /**
@@ -557,7 +618,7 @@ final class PropertyCheck
         }
 
         self::$warnedIds[$this->id] = $this->id;
-        fwrite($this->stderr, $warning . "\n");
+        $this->diagnose($this->stderr, $warning);
     }
 
     /**
@@ -600,12 +661,27 @@ final class PropertyCheck
             return;
         }
 
-        fwrite($this->stderr, sprintf(
+        $this->diagnose($this->stderr, sprintf(
             'Property "%s" discarded %d of %d attempt(s) (%d%%); consider narrowing the generators',
             $this->name,
             $skips,
             $attempts,
             (int) round($skips * 100 / $attempts),
-        ) . "\n");
+        ));
+    }
+
+    /**
+     * One diagnostic line on its own line. PHPUnit is printing its progress
+     * dots on the same terminal while a property runs, so a line that starts
+     * where the cursor happens to be is glued to the end of `....F..`; the
+     * leading newline is what keeps it readable. The Testo adapter has no
+     * progress row and prints without it — the one place the two adapters'
+     * output differs by design (see AGENTS.md).
+     *
+     * @param resource $stream
+     */
+    private function diagnose($stream, string $line): void
+    {
+        fwrite($stream, "\n" . $line . "\n");
     }
 }
