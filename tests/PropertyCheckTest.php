@@ -8,6 +8,7 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\ExpectationFailedException;
 use PHPUnit\Framework\IncompleteTestError;
 use PHPUnit\Framework\SkippedWithMessageException;
 use PHPUnit\Framework\TestCase;
@@ -174,9 +175,9 @@ final class PropertyCheckTest extends TestCase
         $this->forAll(['value' => Gen::intBetween(0, 1_000)])
             ->runs(25)
             ->seed(9)
-            ->throws(\RuntimeException::class)
+            ->throws(\DomainException::class)
             ->check(static function (int $value): void {
-                throw new \RuntimeException('too big: ' . $value);
+                throw new \DomainException('too big: ' . $value);
             });
 
         self::assertGreaterThan($before, $this->numberOfAssertionsPerformed());
@@ -187,10 +188,53 @@ final class PropertyCheckTest extends TestCase
         $this->forAll(['value' => Gen::intBetween(0, 100)])
             ->runs(10)
             ->seed(3)
-            ->throws(\Exception::class)
+            ->throws(\LogicException::class)
             ->check(static function (int $value): void {
-                throw new \RuntimeException((string) $value);
+                throw new \DomainException((string) $value);
             });
+    }
+
+    /**
+     * PHPUnit's assertion failure is an `\Exception`; a `throws()` naming a
+     * class it is an instance of would pass a falsified body (#54).
+     */
+    #[DataProvider('assertionBaseClassProvider')]
+    public function testThrowsRefusesAClassAFailedAssertionIsAnInstanceOf(string $class): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('Invalid expected exception class "%s": a failed assertion is an instance of it', $class));
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])->throws($class);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function assertionBaseClassProvider(): iterable
+    {
+        yield 'Exception' => [\Exception::class];
+        yield 'RuntimeException, the base of every PHPUnit exception' => [\RuntimeException::class];
+        yield 'Throwable' => [\Throwable::class];
+        yield 'AssertionFailedError' => [AssertionFailedError::class];
+    }
+
+    public function testAFailedAssertionIsNeverTheExpectedThrow(): void
+    {
+        // The executor's half of #54, through a subclass the check cannot
+        // refuse up front: ExpectationFailedException extends
+        // AssertionFailedError, and a body whose assertion fails must fail
+        // even when that very class is the one expected.
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 10)])
+                ->runs(5)
+                ->seed(3)
+                ->throws(ExpectationFailedException::class)
+                ->check(static function (int $value): void {
+                    self::assertSame($value, $value + 1);
+                });
+
+            self::fail('The property should have been falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertInstanceOf(PropertyViolationException::class, $failure->getPrevious());
+        }
     }
 
     public function testThrowsFailsWhenTheBodyReturnsNormally(): void
@@ -199,7 +243,7 @@ final class PropertyCheckTest extends TestCase
             $this->forAll(['value' => Gen::intBetween(0, 10)])
                 ->runs(10)
                 ->seed(3)
-                ->throws(\RuntimeException::class)
+                ->throws(\DomainException::class)
                 ->check(static function (int $value): void {});
 
             self::fail('The property should have been falsified');
@@ -209,7 +253,7 @@ final class PropertyCheckTest extends TestCase
 
             $reason = $previous->getPrevious();
             self::assertInstanceOf(\RuntimeException::class, $reason);
-            self::assertSame('Expected RuntimeException to be thrown, but it was not', $reason->getMessage());
+            self::assertSame('Expected DomainException to be thrown, but it was not', $reason->getMessage());
         }
     }
 
@@ -219,9 +263,9 @@ final class PropertyCheckTest extends TestCase
             $this->forAll(['value' => Gen::intBetween(0, 10)])
                 ->runs(10)
                 ->seed(3)
-                ->throws(\RuntimeException::class)
+                ->throws(\DomainException::class)
                 ->check(static function (int $value): void {
-                    throw new \LogicException('wrong one');
+                    throw new \RangeException('wrong one');
                 });
 
             self::fail('The property should have been falsified');
@@ -231,7 +275,7 @@ final class PropertyCheckTest extends TestCase
 
             // The unexpected throw itself is the counterexample's failure,
             // exactly as it would be without throws().
-            self::assertInstanceOf(\LogicException::class, $previous->getPrevious());
+            self::assertInstanceOf(\RangeException::class, $previous->getPrevious());
         }
     }
 
@@ -244,10 +288,10 @@ final class PropertyCheckTest extends TestCase
             $this->forAll(['value' => Gen::intBetween(0, 10_000)])
                 ->runs(100)
                 ->seed(42)
-                ->throws(\RuntimeException::class)
+                ->throws(\DomainException::class)
                 ->check(static function (int $value): void {
                     if ($value < 100) {
-                        throw new \RuntimeException('small enough');
+                        throw new \DomainException('small enough');
                     }
                 });
 
@@ -267,7 +311,7 @@ final class PropertyCheckTest extends TestCase
 
         $this->forAll(['value' => Gen::intBetween(0, 10)])
             ->runs(5)
-            ->throws(\RuntimeException::class)
+            ->throws(\DomainException::class)
             ->check(static function (int $value): void {
                 self::markTestSkipped('no redis here');
             });

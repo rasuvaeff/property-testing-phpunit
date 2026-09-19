@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\PropertyTesting\PhpUnit;
 
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\IncompleteTest;
 use PHPUnit\Framework\SkippedTest;
 use Rasuvaeff\PropertyTesting\AssumptionSkipped;
@@ -64,7 +65,10 @@ final class PhpUnitTrialExecutor implements TrialExecutor
             // was declared to produce.
             return TrialOutcome::skipped();
         } catch (\Throwable $failure) {
-            if ($this->expectedExceptionClass !== null && $failure instanceof $this->expectedExceptionClass) {
+            // A failed assertion is the run's failure whatever class was
+            // expected: `throws()` refuses a class it is an instance of, and
+            // this holds the line for a subclass the check cannot know (#54).
+            if ($this->expectedExceptionClass !== null && $failure instanceof $this->expectedExceptionClass && !$failure instanceof AssertionFailedError) {
                 return TrialOutcome::passed();
             }
 

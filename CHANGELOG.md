@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2 — 2026-09-19
+
+- **Fixed.** A wide `throws()` swallowed a failed assertion: PHPUnit's
+  `AssertionFailedError` extends `\RuntimeException`, so
+  `->throws(\RuntimeException::class)` — or `\Exception`, `\Throwable` —
+  matched a failing `assertSame()` in the body and the property passed on a
+  falsified body, the T-1 of 0.9.0 on the new knob. `throws()` refuses a
+  class the assertion failure is an instance of, naming why; the executor
+  never takes an assertion failure for the expected throw, whatever class
+  was named (#54).
+
 ## 0.9.1 — 2026-09-19
 
 - **Changed.** Accepts `rasuvaeff/property-testing-core` `^0.11` alongside `^0.9`/`^0.10`. Nothing in 0.11.0 reaches this package: the release is additive (the `PropertyTestingException` marker, `AssumptionSkipped` promoted to `@api`, `Gen::stringOf()` defaults, docblock reading in `Gen::forClass()`), and the suite is green against it unchanged.
