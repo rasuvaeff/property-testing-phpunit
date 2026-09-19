@@ -228,6 +228,12 @@ $this->forAll(['width' => Gen::intBetween(1, 5000), 'minWidth' => Gen::intBetwee
 - Возвращается нормально — trial **валится** с `Expected <class> to be thrown,
   but it was not`, и вход shrink-ается как любой контрпример.
 - Бросает другой класс — этот бросок и есть падение, ровно как без `throws()`.
+- Упавшая ассерция — никогда не ожидаемый бросок. `AssertionFailedError`
+  PHPUnit наследует `\RuntimeException`, поэтому `throws()` отвергает класс,
+  экземпляром которого она является — `\RuntimeException`, `\Exception`,
+  `\Throwable` — с `a failed assertion is an instance of it`; называйте
+  исключение, которое бросает тело. Упавший `assertSame()` в теле валит
+  trial, какой бы класс ни ожидался.
 - `markTestSkipped()`/`markTestIncomplete()` всё равно пропускают прогон, а
   `Assume::that()` — discard'ит его: вердикт окружения о прогоне никогда не
   становится пасом, заработанным броском.
