@@ -230,6 +230,12 @@ Semantics, per trial:
   but it was not`, and the input shrinks like any other counterexample.
 - Throws another class — that throw is the failure, exactly as it would be
   without `throws()`.
+- A failed assertion is never the expected throw. PHPUnit's
+  `AssertionFailedError` extends `\RuntimeException`, so `throws()` refuses
+  a class it is an instance of — `\RuntimeException`, `\Exception`,
+  `\Throwable` — with `a failed assertion is an instance of it`; name the
+  exception the body throws. A failing `assertSame()` inside the body fails
+  the trial whatever class was expected.
 - `markTestSkipped()`/`markTestIncomplete()` still skip the run, and an
   `Assume::that()` discard still discards it: the environment's verdict about
   the run is never a pass earned by throwing.

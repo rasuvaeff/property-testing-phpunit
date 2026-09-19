@@ -148,7 +148,9 @@ final class PropertyCheck
      *
      * This is the property-level replacement for `expectException()`, which
      * cannot work inside a `check()` closure: the executor observes every
-     * throw before PHPUnit's own expectation mechanism does. A skip
+     * throw before PHPUnit's own expectation mechanism does. A failed
+     * assertion is never the expected throw, and a class it is an instance
+     * of (`\Exception`, `\Throwable`) is refused here. A skip
      * (`markTestSkipped()`, `markTestIncomplete()`) and an
      * `Assume::that()` discard are still what they are — the environment's
      * verdict about the run, never a pass earned by throwing.
@@ -160,6 +162,15 @@ final class PropertyCheck
         if (!is_a($exceptionClass, \Throwable::class, allow_string: true)) {
             throw new \InvalidArgumentException(sprintf(
                 'Invalid expected exception class "%s": not a Throwable',
+                $exceptionClass,
+            ));
+        }
+        // PHPUnit's assertion failure is an `\Exception`: a class it is an
+        // instance of would match a failed `assertSame()` and pass a
+        // falsified body (#54).
+        if (is_a(AssertionFailedError::class, $exceptionClass, allow_string: true)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Invalid expected exception class "%s": a failed assertion is an instance of it — a falsified body would pass; name the exception the body throws',
                 $exceptionClass,
             ));
         }
