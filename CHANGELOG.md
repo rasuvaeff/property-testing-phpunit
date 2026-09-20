@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0 — 2026-09-20
+
+- **Added:** the core 0.12 knobs on the chain — `exhaustive()` /
+  `exhaustiveBudget()` (walk the parameter domain instead of sampling it),
+  `flakyReplays()` (re-execute the minimised counterexample; a passing replay
+  is reported as flaky) and `searchRuns()` (targeted search after the random
+  phase for a body that calls `Target::maximize()`/`minimize()`); each
+  validates at the call, naming the property, like the other setters.
+- **Added:** `PROPERTY_EXHAUSTIVE` (a flag) and `PROPERTY_SEARCH_RUNS` (a
+  non-negative integer, `0` switches the search off) dial the suite, the way
+  `PROPERTY_DERANDOMIZE` and `PROPERTY_RUNS` do.
+- **Added:** every `Classify::tabulate()` table with its pairwise
+  intersections, the exhaustive outcome (walked, on stdout; declined and why,
+  on stderr) and the search report are printed beside the distribution line;
+  `PROPERTY_VERBOSE` logs every `TargetImproved` event.
+- Requires `rasuvaeff/property-testing-core` `^0.12`.
+
 ## 0.9.2 — 2026-09-19
 
 - **Fixed.** A wide `throws()` swallowed a failed assertion: PHPUnit's

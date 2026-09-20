@@ -29,6 +29,7 @@ use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
 use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
+use Rasuvaeff\PropertyTesting\Target;
 use Rasuvaeff\PropertyTesting\TimeBudgetExceededException;
 
 #[CoversClass(PropertyCheck::class)]
@@ -922,6 +923,9 @@ final class PropertyCheckTest extends TestCase
         yield 'timeoutMs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->timeoutMs(0), 'timeoutMs must be greater than or equal to 1'];
         yield 'budgetMs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->budgetMs(0), 'budgetMs must be greater than or equal to 1'];
         yield 'shrinkBudgetMs(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->shrinkBudgetMs(0), 'shrinkBudgetMs must be greater than or equal to 1'];
+        yield 'exhaustiveBudget(0)' => [static fn(PropertyCheck $check): PropertyCheck => $check->exhaustiveBudget(0), 'exhaustiveBudget must be greater than or equal to 1'];
+        yield 'flakyReplays(-1)' => [static fn(PropertyCheck $check): PropertyCheck => $check->flakyReplays(-1), 'flakyReplays must be greater than or equal to 0'];
+        yield 'searchRuns(-1)' => [static fn(PropertyCheck $check): PropertyCheck => $check->searchRuns(-1), 'searchRuns must be greater than or equal to 0'];
     }
 
     public function testEverySetterAcceptsItsMinimum(): void
@@ -951,6 +955,119 @@ final class PropertyCheckTest extends TestCase
             ->check(static function (int $value): void {
                 self::assertGreaterThanOrEqual(0, $value);
             });
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(1)
+            ->exhaustiveBudget(1)
+            ->flakyReplays(0)
+            ->searchRuns(0)
+            ->seed(1)
+            ->check(static function (int $value): void {
+                self::assertGreaterThanOrEqual(0, $value);
+            });
+    }
+
+    public function testExhaustiveWalksTheWholeDomainAndSaysSo(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+        $seen = [];
+
+        $this->forAll(['flag' => Gen::bool(), 'n' => Gen::intBetween(0, 2)])
+            ->runs(2)
+            ->seed(1)
+            ->exhaustive()
+            ->output($stdout, $stderr)
+            ->check(static function (bool $flag, int $n) use (&$seen): void {
+                $seen[] = [$flag, $n];
+            });
+
+        self::assertSame([[false, 0], [false, 1], [false, 2], [true, 0], [true, 1], [true, 2]], $seen);
+        rewind($stdout);
+        self::assertSame("\n" . 'Property "testExhaustiveWalksTheWholeDomainAndSaysSo" enumerated its whole domain of 6 input(s)' . "\n", (string) stream_get_contents($stdout));
+        rewind($stderr);
+        self::assertSame('', (string) stream_get_contents($stderr));
+    }
+
+    public function testExhaustiveThatDeclinesWarnsWhy(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+
+        $this->forAll(['flag' => Gen::bool(), 'n' => Gen::intBetween(0, 2)])
+            ->runs(2)
+            ->seed(1)
+            ->exhaustive()
+            ->exhaustiveBudget(5)
+            ->output($stdout, $stderr)
+            ->check(static function (bool $flag, int $n): void {});
+
+        rewind($stderr);
+        self::assertSame("\n" . 'Property "testExhaustiveThatDeclinesWarnsWhy" could not enumerate its domain and sampled instead: the domain has 6 inputs, above the exhaustive budget of 5' . "\n", (string) stream_get_contents($stderr));
+    }
+
+    public function testTabulatedCategoriesArePrintedWithTheirIntersections(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(4)
+            ->seed(3)
+            ->output($stdout, $stderr)
+            ->check(static function (int $value): void {
+                Classify::tabulate('features', ['a', 'b']);
+            });
+
+        rewind($stdout);
+        self::assertSame("\n" . 'Property "testTabulatedCategoriesArePrintedWithTheirIntersections" table features: a 100% (4/4), b 100% (4/4); together: a & b 100% (4/4)' . "\n", (string) stream_get_contents($stdout));
+    }
+
+    public function testTheSearchReportIsPrintedForATargetingBody(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+
+        $this->forAll(['a' => Gen::intBetween(0, 1000), 'b' => Gen::intBetween(0, 1000)])
+            ->runs(10)
+            ->seed(3)
+            ->searchRuns(20)
+            ->output($stdout, $stderr)
+            ->check(static function (int $a, int $b): void {
+                Target::maximize('sum', $a + $b);
+            });
+
+        rewind($stdout);
+        self::assertSame(1, preg_match(
+            '/^\nProperty "\w+" search: 20 evaluation\(s\); sum max \d+ \(\d+ improvement\(s\)\)\n$/',
+            (string) stream_get_contents($stdout),
+        ));
+    }
+
+    public function testAFlakyCounterexampleIsNamedInTheFailure(): void
+    {
+        $failed = false;
+
+        try {
+            $this->forAll(['value' => Gen::intBetween(50, 100)])
+                ->runs(5)
+                ->seed(2)
+                ->check(static function (int $value) use (&$failed): void {
+                    if (!$failed) {
+                        $failed = true;
+
+                        self::fail('once');
+                    }
+                });
+
+            self::fail('Expected the property to be falsified');
+        } catch (AssertionFailedError $failure) {
+            self::assertStringContainsString('Flaky:    the minimised input passed on replay 1;', $failure->getMessage());
+        }
     }
 
     public function testASetterErrorLeavesTheEngineMessageOutOfIt(): void

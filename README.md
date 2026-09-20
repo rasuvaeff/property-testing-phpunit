@@ -31,7 +31,7 @@ read — inside an ordinary PHPUnit `TestCase`.
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.9 || ^0.10 || ^0.11`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.12`
 
 PHPUnit 13 requires PHP 8.4.1 or newer. On PHP 8.3, Composer resolves a
 compatible PHPUnit 11 or 12 release.
@@ -113,12 +113,17 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `edgeCases(EdgeCases)` | `None` turns off the numeric boundary bias — for a property the edges only cost runs |
 | `auto(bool = true)` | Derives generators from the closure's signature for every parameter the `forAll()` map does not cover; the map becomes partial overrides. Off by default, and stays off |
 | `throws(string)` | The exception class every trial must throw — a trial that throws it passes, one that does not (or throws another class) fails and shrinks. The property-level replacement for `expectException()`, which never sees a throw from inside the body |
+| `exhaustive(bool = true)` | Walk the whole parameter domain instead of sampling it when every generator is `Enumerable` and the product fits the budget; otherwise the phase samples and a warning says why. `runs()` is ignored when it walks — see the [core README](https://github.com/rasuvaeff/property-testing-core#exhaustive-mode) |
+| `exhaustiveBudget(int)` | The largest domain `exhaustive()` walks (default 10 000) |
+| `flakyReplays(int)` | Re-executions of the minimised counterexample (default 2); one that passes marks it flaky, with a `Flaky:` line in the failure. `0` disables — see [flaky detection](https://github.com/rasuvaeff/property-testing-core#flaky-detection) |
+| `searchRuns(int)` | Bodies the targeted search may execute after the random phase, for a body that calls `Target::maximize()`/`minimize()` (default 0 — no search) — see [targeted search](https://github.com/rasuvaeff/property-testing-core#targeted-search-target) |
 
 Every setter validates its argument at the call, with the property's name in
 the message: `runs(0)` throws
 `Property "testSortIsIdempotent": runs must be greater than or equal to 1`
-(the same for `maxShrinks`/`maxDiscards` below `0` and for
-`timeoutMs`/`budgetMs`/`shrinkBudgetMs` below `1`). A `path()` without a
+(the same for `maxShrinks`/`maxDiscards`/`flakyReplays`/`searchRuns` below
+`0` and for `timeoutMs`/`budgetMs`/`shrinkBudgetMs`/`exhaustiveBudget` below
+`1`). A `path()` without a
 `seed()` — in either order — or a `PROPERTY_PATH` without a seed is refused by
 `check()` the same way. The `forAll()` map is checked by `check()` too, before
 the engine runs: a value that is not an `ArbitraryInterface` throws
@@ -291,6 +296,8 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 | `PROPERTY_DERANDOMIZE` | Derives every unset seed from the property id, making a whole suite reproducible without editing it. Same switch words as `PROPERTY_VERBOSE`: `''` is unset, `0`/`false`/`off`/`no` are off, anything else is on |
 | `PROPERTY_PATH` | A recorded shrink descent (`CounterExample::$path`) replayed instead of searched for. Needs the seed that produced it; an explicit `path()` wins. It describes one failure, so run it with `--filter` on that one test — every other property would report the path as stale |
 | `PROPERTY_EDGE_CASES` | `mixin` or `none` (case-insensitive) — the numeric boundary bias for the whole suite, overriding `edgeCases()`. An unknown value throws |
+| `PROPERTY_EXHAUSTIVE` | Turns exhaustive mode on for every property whose domain fits its budget, overriding `exhaustive()`; the same switch words as `PROPERTY_DERANDOMIZE` |
+| `PROPERTY_SEARCH_RUNS` | Non-negative integer overriding `searchRuns()` for the whole suite — a bigger search budget on a nightly, or `0` to switch it off. A malformed value throws |
 
 `PROPERTY_DB` takes either a directory or a Redis DSN:
 
@@ -334,6 +341,16 @@ Property "testSortKeepsEveryElement" distribution: long 39% (77/200), short 61% 
 
 A property that discards more than 90% of its attempts (via `Assume::that()`)
 gets a warning suggesting narrower generators.
+
+Beside the distribution line, the adapter prints what else the engine
+measured: each `Classify::tabulate()` table with its tag shares and the pairs
+hit together (`Property "…" table features: compressed 40% (80/200), retried
+15% (30/200); together: compressed & retried 10% (20/200)`), whether
+exhaustive mode walked the domain (`enumerated its whole domain of 24
+input(s)`, stdout) or why it sampled instead (stderr), and the search report
+of a body that targets something (`search: 100 evaluation(s); delay max 58210
+(7 improvement(s))`). `PROPERTY_VERBOSE` also logs every `TargetImproved`
+event with the input that scored it.
 
 These diagnostics — the distribution on stdout, the discard warning and the
 unstable-id warnings on stderr — are written straight to the process streams

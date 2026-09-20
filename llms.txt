@@ -83,6 +83,10 @@ public function phases(array $phases): self;         // list<Phase>: Examples, C
 public function derandomize(bool $on = true): self;  // unset seed derived from the property id
 public function path(string $path): self;            // replay a recorded shrink descent; needs its seed
 public function edgeCases(EdgeCases $mode): self;    // Mixin (default) | None = no numeric boundary bias
+public function exhaustive(bool $exhaustive = true): self; // walk the whole parameter product when every generator is Enumerable and it fits the budget
+public function exhaustiveBudget(int $budget): self; // >= 1; default 10_000
+public function flakyReplays(int $replays): self;     // >= 0; default 2; a passing replay of the minimised input = flaky (Flaky: line)
+public function searchRuns(int $runs): self;          // >= 0; default 0 = no targeted search after the random phase (Target::maximize()/minimize())
 public function seed(int $seed): self;               // pin the random phase; disables corpus replay
 public function maxShrinks(int $maxShrinks): self;   // cap accepted shrink steps; 0 = no shrinking
 public function maxDiscards(int $maxDiscards): self; // discard budget; default runs * 10
@@ -143,6 +147,8 @@ final class SortPropertyTest extends TestCase
 | `PROPERTY_DERANDOMIZE` | same switch words as `PROPERTY_VERBOSE` | Unset seeds derived from the property id; `seed()`/`PROPERTY_SEED` still win |
 | `PROPERTY_PATH` | recorded `CounterExample::$path` | Replays that shrink descent; needs the seed of that run; explicit `path()` wins |
 | `PROPERTY_EDGE_CASES` | `mixin` \| `none` (case-insensitive) | Numeric boundary bias; OVERRIDES `edgeCases()`; unknown value throws |
+| `PROPERTY_EXHAUSTIVE` | flag (same words as `PROPERTY_DERANDOMIZE`) | Exhaustive mode for the suite; OVERRIDES `exhaustive()` |
+| `PROPERTY_SEARCH_RUNS` | non-negative integer (`0` = off) | Search budget for the suite; OVERRIDES `searchRuns()`; malformed throws |
 
 ### Classification output
 
