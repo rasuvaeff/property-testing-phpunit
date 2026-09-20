@@ -14,17 +14,22 @@ use Rasuvaeff\PropertyTesting\Runner\Clock;
 use Rasuvaeff\PropertyTesting\Runner\Corpus;
 use Rasuvaeff\PropertyTesting\Runner\CorpusFactory;
 use Rasuvaeff\PropertyTesting\Runner\CoverageFailed;
+use Rasuvaeff\PropertyTesting\Runner\DistributionReport;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
 use Rasuvaeff\PropertyTesting\Runner\EnvironmentOverrides;
 use Rasuvaeff\PropertyTesting\Runner\GaveUp;
+use Rasuvaeff\PropertyTesting\Runner\LabelShare;
 use Rasuvaeff\PropertyTesting\Runner\Passed;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
 use Rasuvaeff\PropertyTesting\Runner\PropertyConfig;
 use Rasuvaeff\PropertyTesting\Runner\PropertyDefinition;
 use Rasuvaeff\PropertyTesting\Runner\PropertyRunner;
 use Rasuvaeff\PropertyTesting\Runner\RunStatistics;
+use Rasuvaeff\PropertyTesting\Runner\SearchReport;
 use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
+use Rasuvaeff\PropertyTesting\Runner\TargetOutcome;
 use Rasuvaeff\PropertyTesting\Runner\TimeBudgetExceeded;
+use Rasuvaeff\PropertyTesting\ValueRenderer;
 
 /**
  * Fluent builder mapping the engine's structured PropertyResult onto PHPUnit:
@@ -60,6 +65,14 @@ final class PropertyCheck
     private ?int $shrinkBudgetMs = null;
     private ?string $path = null;
     private ?EdgeCases $edgeCases = null;
+
+    private ?bool $exhaustive = null;
+
+    private int $exhaustiveBudget = 10_000;
+
+    private int $flakyReplays = 2;
+
+    private ?int $searchRuns = null;
     private ?bool $derandomize = null;
     private bool $auto = false;
     private ?string $expectedExceptionClass = null;
@@ -316,6 +329,58 @@ final class PropertyCheck
     }
 
     /**
+     * Walk the whole parameter domain instead of sampling it, when every
+     * generator has a finite domain (`Enumerable`) and the product fits
+     * {@see exhaustiveBudget()}; otherwise the phase samples and a warning
+     * says why. {@see runs()} is ignored when it walks. `PROPERTY_EXHAUSTIVE`
+     * turns it on for the whole suite.
+     */
+    public function exhaustive(bool $exhaustive = true): self
+    {
+        $this->exhaustive = $exhaustive;
+
+        return $this;
+    }
+
+    /**
+     * The largest domain {@see exhaustive()} walks; 10 000 by default.
+     */
+    public function exhaustiveBudget(int $exhaustiveBudget): self
+    {
+        $this->assertAtLeast('exhaustiveBudget', $exhaustiveBudget, 1);
+        $this->exhaustiveBudget = $exhaustiveBudget;
+
+        return $this;
+    }
+
+    /**
+     * Re-executions of the minimised counterexample after the descent — one
+     * that passes marks the counterexample flaky, with a `Flaky:` line in the
+     * failure. 2 by default; 0 disables the check.
+     */
+    public function flakyReplays(int $flakyReplays): self
+    {
+        $this->assertAtLeast('flakyReplays', $flakyReplays, 0);
+        $this->flakyReplays = $flakyReplays;
+
+        return $this;
+    }
+
+    /**
+     * Bodies the targeted search may execute after the random phase, for a
+     * body that calls `Target::maximize()`/`minimize()`: the best-scoring
+     * inputs are mutated one parameter at a time. 0 (the default) performs no
+     * search. `PROPERTY_SEARCH_RUNS` overrides it for the whole suite.
+     */
+    public function searchRuns(int $searchRuns): self
+    {
+        $this->assertAtLeast('searchRuns', $searchRuns, 0);
+        $this->searchRuns = $searchRuns;
+
+        return $this;
+    }
+
+    /**
      * Replays the shrink descent of an earlier failure, as reported by
      * `CounterExample::$path`, instead of searching for it again. It needs the
      * seed of the run that produced it — the steps mean nothing against
@@ -453,6 +518,12 @@ final class PropertyCheck
                 derandomize: EnvironmentOverrides::flag(getenv('PROPERTY_DERANDOMIZE')) ?? $this->derandomize ?? false,
                 path: $path,
                 edgeCases: EnvironmentOverrides::edgeCases(getenv('PROPERTY_EDGE_CASES')) ?? $this->edgeCases ?? EdgeCases::Mixin,
+                // Suite dials as well: enumerate everything small on a
+                // nightly, or give the search a bigger budget there.
+                exhaustive: EnvironmentOverrides::flag(getenv('PROPERTY_EXHAUSTIVE')) ?? $this->exhaustive ?? false,
+                exhaustiveBudget: $this->exhaustiveBudget,
+                flakyReplays: $this->flakyReplays,
+                searchRuns: EnvironmentOverrides::count('PROPERTY_SEARCH_RUNS', getenv('PROPERTY_SEARCH_RUNS')) ?? $this->searchRuns ?? 0,
             ),
             examples: $this->examples,
             replayRegressions: $this->seed === null,
@@ -499,6 +570,9 @@ final class PropertyCheck
             // suite merges the two streams; see AGENTS.md.
             $this->warnOnExcessiveSkips($statistics);
             $this->reportClassifications($statistics);
+            $this->reportTables($statistics);
+            $this->reportExhaustive($statistics);
+            $this->reportSearch($statistics);
         }
 
         // The check is the assertion, whichever way it went: counted before
@@ -612,6 +686,73 @@ final class PropertyCheck
         }
 
         $this->diagnose($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)));
+    }
+
+    /**
+     * One line per `Classify::tabulate()` table: the tag shares, then the
+     * pairs hit together when any were — the same wording the Testo adapter
+     * prints, on the distribution's stream.
+     */
+    private function reportTables(RunStatistics $statistics): void
+    {
+        if ($statistics->checks <= 0) {
+            return;
+        }
+
+        $report = DistributionReport::of($statistics, coverageAssessed: true);
+
+        foreach ($report->tables as $table => $shares) {
+            $render = static fn(LabelShare $share): string => sprintf('%s %d%% (%d/%d)', $share->label, (int) round($share->percent), $share->count, $report->checks);
+            $parts = array_map($render, $shares);
+            $pairs = array_map($render, $report->intersections[$table] ?? []);
+
+            $this->diagnose(
+                $this->stdout,
+                sprintf('Property "%s" table %s: %s', $this->name, $table, implode(', ', $parts))
+                    . ($pairs === [] ? '' : sprintf('; together: %s', implode(', ', $pairs))),
+            );
+        }
+    }
+
+    /**
+     * What exhaustive mode did, for a property that asked for it: the domain
+     * it walked (stdout, like the distribution), or why it sampled instead
+     * (stderr, like the discard warning).
+     */
+    private function reportExhaustive(RunStatistics $statistics): void
+    {
+        if ($statistics->domainSize !== null) {
+            $this->diagnose($this->stdout, sprintf('Property "%s" enumerated its whole domain of %d input(s)', $this->name, $statistics->domainSize));
+        } elseif ($statistics->exhaustiveDeclined !== null) {
+            $this->diagnose($this->stderr, sprintf('Property "%s" could not enumerate its domain and sampled instead: %s', $this->name, $statistics->exhaustiveDeclined));
+        }
+    }
+
+    /**
+     * The search report: how many bodies the search phase executed and where
+     * every `Target` label ended up.
+     */
+    private function reportSearch(RunStatistics $statistics): void
+    {
+        $search = $statistics->search;
+
+        if (!$search instanceof SearchReport) {
+            return;
+        }
+
+        $parts = array_map(
+            static fn(TargetOutcome $target): string => sprintf(
+                '%s %s %s (%d improvement(s)%s)',
+                $target->label,
+                $target->direction->value === 'maximize' ? 'max' : 'min',
+                $target->best === null ? '-' : ValueRenderer::render($target->best),
+                $target->improvements,
+                $target->recalled > 0 ? sprintf(', %d recalled', $target->recalled) : '',
+            ),
+            $search->targets,
+        );
+
+        $this->diagnose($this->stdout, sprintf('Property "%s" search: %d evaluation(s); %s', $this->name, $search->evaluations, implode(', ', $parts)));
     }
 
     /**

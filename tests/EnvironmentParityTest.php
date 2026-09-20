@@ -23,6 +23,7 @@ use Rasuvaeff\PropertyTesting\RegressionViolationException;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
 use Rasuvaeff\PropertyTesting\Runner\EnvironmentOverrides;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
+use Rasuvaeff\PropertyTesting\Target;
 
 /**
  * The environment contract, byte-for-byte the Testo adapter's: PROPERTY_RUNS
@@ -717,6 +718,66 @@ final class EnvironmentParityTest extends TestCase
         putenv('PROPERTY_EDGE_CASES=mixin');
 
         self::assertGreaterThan(10, $this->edgesSeen(static fn(PropertyCheck $check): PropertyCheck => $check->edgeCases(EdgeCases::None)));
+    }
+
+    public function testPropertyExhaustiveTurnsEnumerationOnForTheSuite(): void
+    {
+        putenv('PROPERTY_EXHAUSTIVE=1');
+        $seen = 0;
+
+        $this->forAll(['value' => Gen::intBetween(1, 10)])
+            ->output(fopen('php://memory', 'r+'), fopen('php://memory', 'r+'))
+            ->runs(3)
+            ->check(static function (int $value) use (&$seen): void {
+                ++$seen;
+            });
+
+        self::assertSame(10, $seen);
+    }
+
+    public function testPropertyExhaustiveCanTurnTheChainOff(): void
+    {
+        putenv('PROPERTY_EXHAUSTIVE=off');
+        $seen = 0;
+
+        $this->forAll(['value' => Gen::intBetween(1, 10)])
+            ->runs(3)
+            ->seed(1)
+            ->exhaustive()
+            ->check(static function (int $value) use (&$seen): void {
+                ++$seen;
+            });
+
+        self::assertSame(3, $seen);
+    }
+
+    public function testPropertySearchRunsOverridesTheChain(): void
+    {
+        putenv('PROPERTY_SEARCH_RUNS=7');
+        $seen = 0;
+
+        $this->forAll(['value' => Gen::intBetween(1, 10)])
+            ->output(fopen('php://memory', 'r+'), fopen('php://memory', 'r+'))
+            ->runs(3)
+            ->seed(1)
+            ->searchRuns(50)
+            ->check(static function (int $value) use (&$seen): void {
+                ++$seen;
+                Target::maximize('value', $value);
+            });
+
+        self::assertSame(10, $seen);
+    }
+
+    public function testPropertySearchRunsRejectsAMalformedValue(): void
+    {
+        putenv('PROPERTY_SEARCH_RUNS=many');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('PROPERTY_SEARCH_RUNS must be a non-negative integer, got "many"');
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->check(static function (int $value): void {});
     }
 
     public function testPropertyEdgeCasesRejectsAnUnknownValue(): void

@@ -31,7 +31,7 @@ shrink до минимального контрпримера, который р
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.9 || ^0.10 || ^0.11`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.12`
 
 PHPUnit 13 требует PHP 8.4.1 или новее. На PHP 8.3 Composer выбирает
 совместимый релиз PHPUnit 11 или 12.
@@ -113,12 +113,16 @@ Property falsified after 12 successful run(s); seed=7382910
 | `edgeCases(EdgeCases)` | `None` выключает граничное смещение числовых генераторов — для property, которой края стоят только прогонов |
 | `auto(bool = true)` | Достраивает генераторы из сигнатуры кложуры для параметров, не покрытых картой `forAll()`; карта становится частичными overrides. По умолчанию выключен и дефолтом не станет |
 | `throws(string)` | Класс исключения, которое обязан бросить каждый trial: бросивший его trial проходит, не бросивший (или бросивший другой класс) валит property и shrink-ается. Замена `expectException()` на уровне property — сам `expectException()` бросок из тела не видит |
+| `exhaustive(bool = true)` | Обойти весь домен параметров вместо выборки, когда каждый генератор — `Enumerable`, а произведение умещается в бюджет; иначе фаза делает выборку, а предупреждение говорит почему. `runs()` при обходе игнорируется — см. [README core](https://github.com/rasuvaeff/property-testing-core#exhaustive-mode) |
+| `exhaustiveBudget(int)` | Наибольший домен, который обходит `exhaustive()` (по умолчанию 10 000) |
+| `flakyReplays(int)` | Повторные исполнения минимизированного контрпримера (по умолчанию 2); прошедший помечает его flaky, со строкой `Flaky:` в сообщении. `0` выключает — см. [детекцию flaky](https://github.com/rasuvaeff/property-testing-core#flaky-detection) |
+| `searchRuns(int)` | Сколько тел может исполнить целевой поиск после random-фазы, если тело вызывает `Target::maximize()`/`minimize()` (по умолчанию 0 — без поиска) — см. [целевой поиск](https://github.com/rasuvaeff/property-testing-core#targeted-search-target) |
 
 Каждый сеттер проверяет аргумент в момент вызова, с именем property в
 сообщении: `runs(0)` бросает
 `Property "testSortIsIdempotent": runs must be greater than or equal to 1`
-(так же `maxShrinks`/`maxDiscards` ниже `0` и `timeoutMs`/`budgetMs`/
-`shrinkBudgetMs` ниже `1`). `path()` без `seed()` — в любом порядке — или
+(так же `maxShrinks`/`maxDiscards`/`flakyReplays`/`searchRuns` ниже `0` и
+`timeoutMs`/`budgetMs`/`shrinkBudgetMs`/`exhaustiveBudget` ниже `1`). `path()` без `seed()` — в любом порядке — или
 `PROPERTY_PATH` без seed так же отвергает `check()`. Карту `forAll()`
 `check()` тоже проверяет до запуска движка: значение, не являющееся
 `ArbitraryInterface`, даёт
@@ -289,6 +293,8 @@ $this->forAll(['width' => Gen::intBetween(1, 5000), 'minWidth' => Gen::intBetwee
 | `PROPERTY_DERANDOMIZE` | Выводит каждый незаданный seed из id property: весь сьют становится воспроизводимым без правки кода. Те же слова-переключатели, что у `PROPERTY_VERBOSE`: `''` — не задано, `0`/`false`/`off`/`no` — выключено, всё остальное — включено |
 | `PROPERTY_PATH` | Записанный спуск shrink (`CounterExample::$path`) воспроизводится вместо повторного поиска. Нужен seed того прогона; явный `path()` побеждает. Он описывает одно падение, поэтому запускайте с `--filter` на этот один тест — любое другое property сообщит, что путь устарел |
 | `PROPERTY_EDGE_CASES` | `mixin` или `none` (регистр не важен) — граничное смещение для всего сьюта, перекрывает `edgeCases()`. Неизвестное значение — исключение |
+| `PROPERTY_EXHAUSTIVE` | Включает исчерпывающий режим для каждой property, чей домен умещается в бюджет, перекрывая `exhaustive()`; те же слова-переключатели, что у `PROPERTY_DERANDOMIZE` |
+| `PROPERTY_SEARCH_RUNS` | Неотрицательное целое, перекрывающее `searchRuns()` для всего сьюта — больший бюджет поиска на ночном прогоне или `0`, чтобы выключить его. Испорченное значение — исключение |
 
 `PROPERTY_DB` принимает либо каталог, либо Redis-DSN:
 
@@ -331,6 +337,16 @@ Property "testSortKeepsEveryElement" distribution: long 39% (77/200), short 61% 
 
 Property, отбрасывающая больше 90% попыток (через `Assume::that()`), получает
 предупреждение с советом сузить генераторы.
+
+Рядом со строкой распределения адаптер печатает остальное, что измерил
+движок: каждую таблицу `Classify::tabulate()` с долями тегов и парами,
+встретившимися вместе (`Property "…" table features: compressed 40% (80/200),
+retried 15% (30/200); together: compressed & retried 10% (20/200)`), обошёл ли
+исчерпывающий режим домен (`enumerated its whole domain of 24 input(s)`,
+stdout) или почему сделал выборку (stderr), и отчёт поиска property, которая
+что-то целит (`search: 100 evaluation(s); delay max 58210 (7 improvement(s))`).
+`PROPERTY_VERBOSE` дополнительно логирует каждое событие `TargetImproved` с
+давшим его входом.
 
 Эта диагностика — распределение в stdout, предупреждение о discard'ах и
 предупреждения о нестабильном id в stderr — пишется прямо в потоки процесса,
