@@ -11,7 +11,7 @@ composer require --dev rasuvaeff/property-testing-phpunit
 
 Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
 (PHPUnit 13 requires PHP 8.4.1+; PHP 8.3 resolves PHPUnit 11 or 12),
-`rasuvaeff/property-testing-core` `^0.9 || ^0.10 || ^0.11`.
+`rasuvaeff/property-testing-core` `^1.0`.
 
 ## Rules
 
@@ -141,7 +141,7 @@ final class SortPropertyTest extends TestCase
 |---|---|---|
 | `PROPERTY_RUNS` | positive integer within range (no saturation) | Overrides every property's run count; invalid value throws `InvalidArgumentException` |
 | `PROPERTY_SEED` | integer within range | Seeds properties without an explicit `seed()`; `seed()` wins; invalid value throws |
-| `PROPERTY_VERBOSE` | `''` = unset; `0`/`false`/`off`/`no` (case-insensitive, trimmed) = off; anything else = on (core 0.9: only `''`/`0` are off) | Trace: each run's arguments/draws, each accepted shrink step |
+| `PROPERTY_VERBOSE` | `''` = unset; `0`/`false`/`off`/`no` (case-insensitive, trimmed) = off; anything else = on | Trace: each run's arguments/draws, each accepted shrink step |
 | `PROPERTY_DB` | directory path OR `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; parsed by core `CorpusFactory`) | Regression corpus: record on falsification, replay first on the next run, prune on green. A DSN builds a RedisCorpus (ext-redis preferred, else predis; neither installed THROWS) — same document as the directory form, shared between CI and developers |
 | `PROPERTY_PHASES` | `examples,corpus,random,shrink` (comma-separated, case-insensitive) | Stages to run; OVERRIDES `phases()`; unknown name throws |
 | `PROPERTY_DERANDOMIZE` | same switch words as `PROPERTY_VERBOSE` | Unset seeds derived from the property id; `seed()`/`PROPERTY_SEED` still win |
