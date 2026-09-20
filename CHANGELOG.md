@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 — 2026-09-20
 
 - **Added:** the core 0.12 knobs on the chain — `exhaustive()` /
   `exhaustiveBudget()` (walk the parameter domain instead of sampling it),
