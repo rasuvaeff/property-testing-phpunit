@@ -31,7 +31,7 @@ read — inside an ordinary PHPUnit `TestCase`.
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.12`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^1.0`
 
 PHPUnit 13 requires PHP 8.4.1 or newer. On PHP 8.3, Composer resolves a
 compatible PHPUnit 11 or 12 release.
@@ -266,7 +266,7 @@ would otherwise falsify every run without a word of explanation.
 - `markTestSkipped()` / `markTestIncomplete()` inside the body **skip that
   run** (a discard); when every run skipped, the skip is rethrown and PHPUnit
   reports the test as skipped or incomplete. Partly skipped runs spend a budget
-  of their own, separate from `maxDiscards`: since core 0.9 a skip is not a
+  of their own, separate from `maxDiscards`: a skip is not a
   discard, and when that budget runs out the message names the environment
   rather than advising narrower generators. Unlike an `Assume::that()` discard,
   a skip says nothing about the input, so a recorded regression whose replay
@@ -290,7 +290,7 @@ Byte-for-byte parity with the Testo adapter — one contract across adapters:
 |---|---|
 | `PROPERTY_RUNS` | Positive integer that overrides every property's run count (dial runs up in CI) |
 | `PROPERTY_SEED` | Integer seed for any property without an explicit `seed()` (replay a whole suite). An explicit `seed()` still wins |
-| `PROPERTY_VERBOSE` | Enables the trace of every run's generated arguments and each accepted shrink step. `''` is unset; `0`, `false`, `off`, `no` (case-insensitive, trimmed) are off; anything else is on. Core 0.9 reads only `''`/`0` as off |
+| `PROPERTY_VERBOSE` | Enables the trace of every run's generated arguments and each accepted shrink step. `''` is unset; `0`, `false`, `off`, `no` (case-insensitive, trimmed) are off; anything else is on. |
 | `PROPERTY_DB` | Directory path enabling the regression corpus, or a `redis://host[:port][/db][?prefix=key-prefix]` DSN (`rediss://` for TLS) for a corpus shared between CI and developers. Unset means off, nothing is written |
 | `PROPERTY_PHASES` | Comma-separated stage list (`examples,corpus,random,shrink`, case-insensitive) that overrides `phases()` — an unknown name throws rather than skipping a stage. `examples,corpus` is the fast pull-request gate |
 | `PROPERTY_DERANDOMIZE` | Derives every unset seed from the property id, making a whole suite reproducible without editing it. Same switch words as `PROPERTY_VERBOSE`: `''` is unset, `0`/`false`/`off`/`no` are off, anything else is on |

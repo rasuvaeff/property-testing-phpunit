@@ -31,7 +31,7 @@ shrink до минимального контрпримера, который р
 
 - PHP 8.3+
 - [`phpunit/phpunit`](https://packagist.org/packages/phpunit/phpunit) `^11.5 || ^12.0 || ^13.0`
-- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^0.12`
+- [`rasuvaeff/property-testing-core`](https://packagist.org/packages/rasuvaeff/property-testing-core) `^1.0`
 
 PHPUnit 13 требует PHP 8.4.1 или новее. На PHP 8.3 Composer выбирает
 совместимый релиз PHPUnit 11 или 12.
@@ -264,7 +264,7 @@ $this->forAll(['width' => Gen::intBetween(1, 5000), 'minWidth' => Gen::intBetwee
 - `markTestSkipped()` / `markTestIncomplete()` внутри тела **пропускают этот
   прогон** (discard); если пропущены все прогоны, исключение пробрасывается, и
   PHPUnit помечает тест skipped/incomplete. Частично пропущенные прогоны
-  тратят собственный бюджет, отдельный от `maxDiscards`: с core 0.9 skip — не
+  тратят собственный бюджет, отдельный от `maxDiscards`: skip — не
   discard, и при исчерпании этого бюджета сообщение называет окружение, а не
   советует сузить генераторы. В отличие от discard'а по `Assume::that()`, skip
   ничего не говорит о входе, поэтому записанная регрессия, чей реплей только
@@ -287,7 +287,7 @@ $this->forAll(['width' => Gen::intBetween(1, 5000), 'minWidth' => Gen::intBetwee
 |---|---|
 | `PROPERTY_RUNS` | Положительное целое, переопределяет число прогонов каждой property (поднять runs в CI) |
 | `PROPERTY_SEED` | Целочисленный seed для property без явного `seed()` (реплей всего suite). Явный `seed()` важнее |
-| `PROPERTY_VERBOSE` | Включает трассу: аргументы каждого прогона и каждый принятый shrink-шаг. `''` — не задано; `0`, `false`, `off`, `no` (регистр не важен, пробелы обрезаются) — выключено; всё остальное — включено. Core 0.9 считает выключением только `''`/`0` |
+| `PROPERTY_VERBOSE` | Включает трассу: аргументы каждого прогона и каждый принятый shrink-шаг. `''` — не задано; `0`, `false`, `off`, `no` (регистр не важен, пробелы обрезаются) — выключено; всё остальное — включено. |
 | `PROPERTY_DB` | Путь к каталогу, включающий регрессионный корпус, либо DSN `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` для TLS) для корпуса, общего между CI и разработчиками. Не задан — выключен, ничего не пишется |
 | `PROPERTY_PHASES` | Список стадий через запятую (`examples,corpus,random,shrink`, регистр не важен), перекрывающий `phases()`; неизвестное имя — исключение, а не пропуск стадии. `examples,corpus` — быстрый гейт для pull request |
 | `PROPERTY_DERANDOMIZE` | Выводит каждый незаданный seed из id property: весь сьют становится воспроизводимым без правки кода. Те же слова-переключатели, что у `PROPERTY_VERBOSE`: `''` — не задано, `0`/`false`/`off`/`no` — выключено, всё остальное — включено |

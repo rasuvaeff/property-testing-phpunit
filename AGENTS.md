@@ -60,7 +60,7 @@ monorepo root with the whole root mounted, e.g.
 `docker run --rm -v "$PWD":/repo -w /repo/property-testing-phpunit composer:2 …`):
 
 ```bash
-composer config repositories.core '{"type":"path","url":"../property-testing-core","options":{"versions":{"rasuvaeff/property-testing-core":"0.9.0"}}}'
+composer config repositories.core '{"type":"path","url":"../property-testing-core","options":{"versions":{"rasuvaeff/property-testing-core":"1.0.0"}}}'
 composer update
 composer config --unset repositories.core
 rm composer.lock
@@ -104,7 +104,7 @@ parity is golden rule 3.
 |---|---|---|---|---|
 | `PROPERTY_RUNS` | Always (`false`/`''` = unset) | `/^\d+\z/`, `>= 1` | Overrides every property's run count, including `runs()` | `InvalidArgumentException` |
 | `PROPERTY_SEED` | Only when `seed()` was not called (explicit seed wins) | `/^-?\d+\z/` | Seeds every unseeded property; unset means a random seed per property | `InvalidArgumentException` |
-| `PROPERTY_VERBOSE` | Always | `''` = unset; `0`, `false`, `off`, `no` (case-insensitive, trimmed) = off; anything else enables (core `EnvironmentOverrides::flag()`; core 0.9 knows only `''`/`0`) | Attaches `VerboseListener`: every run's arguments/draws and each accepted shrink step | n/a (off words disable) |
+| `PROPERTY_VERBOSE` | Always | `''` = unset; `0`, `false`, `off`, `no` (case-insensitive, trimmed) = off; anything else enables (core `EnvironmentOverrides::flag()`) | Attaches `VerboseListener`: every run's arguments/draws and each accepted shrink step | n/a (off words disable) |
 | `PROPERTY_DB` | Always (`false`/`''` = off, nothing written) | Directory path (created on demand) **or** `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; core `CorpusFactory`) | Regression corpus via core's `CorpusFactory::fromDsn()` (`CorpusFromEnv` was removed in 0.6.0): a path builds a `FilesystemCorpus`, a DSN a `RedisCorpus` (ext-redis preferred, else predis). An explicit `seed()` disables replay for that property | `InvalidArgumentException` — an unusable DSN, or no Redis client installed. Never a silent fall back to the filesystem |
 | `PROPERTY_PHASES` | Always (`false`/`''` = unset) | Comma-separated phase names, case-insensitive: `examples`, `corpus`, `random`, `shrink` | Stages of every run, in run order — **overrides** `phases()` | `InvalidArgumentException` naming the accepted values |
 | `PROPERTY_DERANDOMIZE` | Always | Same words as `PROPERTY_VERBOSE` | Derives every unset seed from the property id — **overrides** `derandomize()` | n/a (off words disable) |

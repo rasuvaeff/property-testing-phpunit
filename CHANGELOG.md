@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0 — 2026-09-20
+
+The stability release, in step with `rasuvaeff/property-testing-core` 1.0.0.
+The adapter's surface is that of 0.10.0, unchanged: the `PropertyTesting`
+trait, the `forAll()` chain with its knobs, `PropertyCheck`, the listeners
+and the environment table. A project on `^0.10` upgrades by widening the
+constraint to `^1.0`.
+
+- Requires `rasuvaeff/property-testing-core` `^1.0` (compatibility policy
+  §8: a caret on the engine's current major).
+- **Docs:** the footnotes that dated a behaviour to a core 0.x release
+  (`since core 0.9`, `core 0.9 reads only …`) are gone from the READMEs,
+  `llms.txt` and `AGENTS.md`; `llms.txt` names the current requirement.
+
 ## 0.10.0 — 2026-09-20
 
 - **Added:** the core 0.12 knobs on the chain — `exhaustive()` /
