@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Docs:** the READMEs and `llms.txt` now state what follows from driving the
+  engine through a single PHPUnit test method: `setUp()`/`tearDown()` and
+  `#[Before]`/`#[After]` run once per property rather than per run, test-double
+  expectations are verified after the last run (an unmet `once()` fails the
+  property as a whole and is never shrunk), and per-test coverage counts lines
+  reached only while shrinking. The Testo adapter does not share the first one.
+
 ## 1.0.0 — 2026-09-20
 
 The stability release, in step with `rasuvaeff/property-testing-core` 1.0.0.
