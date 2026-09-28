@@ -56,6 +56,14 @@ Requires PHP 8.3–8.5, `phpunit/phpunit` `^11.5 || ^12.0 || ^13.0`
   that returns normally or throws another class fails and shrinks. Skips and
   `Assume::that()` discards are unaffected. A non-Throwable class string is
   rejected with `InvalidArgumentException`.
+- The engine drives ONE PHPUnit test method, so: `setUp()`/`tearDown()` and
+  `#[Before]`/`#[After]` run once per property, not per run (state leaks into
+  the next run and into every shrink attempt); test-double expectations are
+  verified after the last run, so an unmet `once()` fails the property as a
+  whole instead of being attributed to an input and shrunk; per-test coverage
+  includes lines reached only while shrinking. Per-input fixtures and doubles
+  belong inside the body. The Testo adapter runs each trial through the
+  framework's interceptor pipeline, so there lifecycle hooks DO run per run.
 - Environment contract and corpus format are identical to the Testo adapter
   and to frozen `rasuvaeff/property-testing` 2.8 — corpora interoperate.
 - Generators, `Shrinkable`, `Assume`, `Classify`, `Gen::draw()`, state-machine

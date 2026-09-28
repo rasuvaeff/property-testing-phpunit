@@ -276,7 +276,22 @@ would otherwise falsify every run without a word of explanation.
   [`throws()`](#expected-exceptions-throws) instead, or assert on the
   exception inside the body.
 - `setUp()` runs once per test, not per generated input — a property is one
-  test method with one `check()`.
+  test method with one `check()`. So is `tearDown()`, and so are `#[Before]`
+  and `#[After]` hooks: state a run leaves behind is visible to the next run
+  and to every shrinking attempt. Build per-input fixtures inside the body.
+- **Test double expectations are verified once per property.** PHPUnit
+  verifies the doubles it created when the test method ends, which is after
+  the last run. An unmet `once()` therefore fails the property as a whole:
+  it is not attributed to an input and it is not shrunk. A double that must
+  be checked per input has to be created and verified inside the body.
+- **Code coverage counts shrinking attempts.** Every run — random phase,
+  corpus replay and each shrink trial — executes inside the one test method,
+  so per-test coverage includes lines reached only while shrinking.
+- These three follow from driving the engine through a single test method,
+  which is what PHPUnit's extension points allow. The
+  [Testo adapter](https://github.com/rasuvaeff/property-testing-testo) does
+  not share the first one: there each run goes through the framework's
+  interceptor pipeline, so lifecycle hooks run per run.
 - With a **data provider**, the corpus id carries the data set name
   (`Class::method with data set "large"`), so the sets do not replay — and
   prune — each other's regressions. The unstable-id warning is printed only
