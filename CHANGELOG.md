@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-10-02
 
 - **Added:** generators written on the closure's parameters with core's
   `#[Generate]` (#61). Without `auto()`, the `forAll()` map and the
