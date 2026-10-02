@@ -117,6 +117,11 @@ fully-typed closure needs no map. A map key that is not a parameter is an
 error, with auto as without. Strictly opt-in, never the default (bare int/float derive their
 full native domain). No PROPERTY_AUTO env variable, deliberately.
 
+`#[Generate(...)]` on a closure parameter (core 1.2) holds its generator: an arbitrary built
+with `new`, or a static factory reference ('Class::method', [Class::class, 'method'],
+invokable). Works WITHOUT auto(): the forAll() map plus the attributes must cover every
+parameter, an uncovered one throws by name. Under auto(): map > #[Generate] > @param > native.
+
 ### Example
 
 ```php

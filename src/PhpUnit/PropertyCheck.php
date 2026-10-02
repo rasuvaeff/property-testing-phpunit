@@ -590,9 +590,9 @@ final class PropertyCheck
     }
 
     /**
-     * The generators the property runs with: the {@see forAll()} map, or —
-     * under {@see auto()} — that map as overrides with every uncovered
-     * parameter derived from the closure's signature. The derivation errors are
+     * The generators the property runs with: the {@see forAll()} map plus any
+     * `#[Generate]` on the closure's parameters, and — under {@see auto()} —
+     * every parameter neither covers derived from the closure's signature. The derivation errors are
      * {@see Gen::forParameters()}'s own, naming the function and the parameter.
      *
      * The map is checked here, before the engine sees it, because the engine
@@ -636,11 +636,10 @@ final class PropertyCheck
             $generators[$name] = $generator;
         }
 
-        if (!$this->auto) {
-            return $generators;
-        }
-
-        return Gen::forParameters($property, $generators);
+        // Without auto nothing is derived from the declared types, but a
+        // parameter may still carry its generator as #[Generate]: the map and
+        // the attributes together have to cover every parameter.
+        return Gen::forParameters($property, $generators, derive: $this->auto);
     }
 
     /**
