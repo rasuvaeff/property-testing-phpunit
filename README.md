@@ -187,6 +187,38 @@ Rules worth knowing — verbatim the Testo adapter's (`#[Property(auto: true)]`)
   environment dials the suite, while `auto()` changes what one property's
   arguments mean.
 
+### Generators on the parameter (`#[Generate]`)
+
+A parameter can carry its generator itself — core's `#[Generate]`
+(`rasuvaeff/property-testing-core` 1.2):
+
+```php
+use Rasuvaeff\PropertyTesting\Arbitrary\IntArbitrary;
+use Rasuvaeff\PropertyTesting\Generate;
+
+$this->forAll()->check(static function (
+    #[Generate(new IntArbitrary(0, 10_000))]
+    int $base,
+    #[Generate([Generators::class, 'attempts'])]
+    int $attempt,
+): void {
+    // ...
+});
+```
+
+- It works **without `auto`**: the `forAll()` map can be empty, the attributes
+  alone are enough — as long as they cover every parameter. The map and the
+  attributes may also split the parameters between them. A parameter that
+  neither covers is refused by name; nothing is derived from the types
+  unless `auto()` says so.
+- Under `auto()` it is read after the `forAll()` map and before the `@param`
+  type and the native type.
+- The argument is an arbitrary built with `new`, or a reference to a static
+  factory returning one (`'method'`, `'Class::method'`,
+  `[Class::class, 'method']`, an invokable) — the way to use `Gen::map()`,
+  `Gen::email()`, `Gen::regex()` and other generators built with a closure.
+  What `new` can express is listed in core's README.
+
 ### Naming a property (`id()`)
 
 `id()` names the property:

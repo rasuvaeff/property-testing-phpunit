@@ -185,6 +185,38 @@ $this->forAll(['multiplier' => Gen::floatBetween(1.0, 4.0)])
 - Переменной окружения `PROPERTY_AUTO` нет намеренно: окружение крутит сьют,
   а `auto()` меняет смысл аргументов конкретной property.
 
+### Генераторы на параметре (`#[Generate]`)
+
+Параметр может нести генератор сам — атрибут `#[Generate]` из ядра
+(`rasuvaeff/property-testing-core` 1.2):
+
+```php
+use Rasuvaeff\PropertyTesting\Arbitrary\IntArbitrary;
+use Rasuvaeff\PropertyTesting\Generate;
+
+$this->forAll()->check(static function (
+    #[Generate(new IntArbitrary(0, 10_000))]
+    int $base,
+    #[Generate([Generators::class, 'attempts'])]
+    int $attempt,
+): void {
+    // ...
+});
+```
+
+- Работает **без `auto`**: карта `forAll()` может быть пустой, достаточно
+  одних атрибутов — при условии, что они покрывают каждый параметр. Карта и
+  атрибуты могут и поделить параметры между собой. Параметр, не покрытый ни тем, ни другим, —
+  отказ с его именем; из типов ничего не выводится, пока не сказано
+  `auto()`.
+- Под `auto()` атрибут читается после карты `forAll()` и до `@param`-типа и
+  нативного типа.
+- Аргумент — arbitrary, построенный через `new`, или ссылка на статическую
+  фабрику, которая его возвращает (`'method'`, `'Class::method'`,
+  `[Class::class, 'method']`, invokable), — так используются `Gen::map()`,
+  `Gen::email()`, `Gen::regex()` и другие генераторы на замыканиях. Что
+  выражается через `new` — в README ядра.
+
 ### Имя property (`id()`)
 
 `id()` именует property:

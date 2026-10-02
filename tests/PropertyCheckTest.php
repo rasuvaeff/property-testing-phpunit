@@ -12,6 +12,7 @@ use PHPUnit\Framework\ExpectationFailedException;
 use PHPUnit\Framework\IncompleteTestError;
 use PHPUnit\Framework\SkippedWithMessageException;
 use PHPUnit\Framework\TestCase;
+use Rasuvaeff\PropertyTesting\Arbitrary\IntArbitrary;
 use Rasuvaeff\PropertyTesting\Assume;
 use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\CoverageViolationException;
@@ -21,6 +22,7 @@ use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\ExampleViolationException;
 use Rasuvaeff\PropertyTesting\GaveUpException;
 use Rasuvaeff\PropertyTesting\Gen;
+use Rasuvaeff\PropertyTesting\Generate;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
@@ -1144,7 +1146,7 @@ final class PropertyCheckTest extends TestCase
     public function testWithoutAutoTheForAllMapIsUsedVerbatim(): void
     {
         // auto stays opt-in: no derivation happens unless auto() was called,
-        // so a missing generator surfaces exactly as before.
+        // so a parameter the map does not cover is refused, not derived.
         try {
             $this->forAll(['x' => Gen::constant(7)])
                 ->runs(1)
@@ -1153,10 +1155,41 @@ final class PropertyCheckTest extends TestCase
 
             self::fail('Expected a failure about the missing generator');
         } catch (\InvalidArgumentException $failure) {
-            // The engine's own refusal for a map that does not cover a
-            // parameter — not a derivation error, which auto would produce.
-            self::assertSame('No generator for parameter "missing"', $failure->getMessage());
+            self::assertStringEndsWith(
+                'parameter $missing has no generator; pass an override or #[Generate]',
+                $failure->getMessage(),
+            );
         }
+    }
+
+    public function testWithoutAutoAGenerateAttributeCoversItsParameter(): void
+    {
+        $seen = [];
+
+        $this->forAll(['x' => Gen::constant(7)])
+            ->runs(20)
+            ->seed(1)
+            ->check(static function (int $x, #[Generate(new IntArbitrary(3, 3))] int $y) use (&$seen): void {
+                $seen[] = [$x, $y];
+            });
+
+        self::assertNotSame([], $seen);
+        self::assertSame([[7, 3]], array_values(array_unique($seen, SORT_REGULAR)));
+    }
+
+    public function testAutoReadsAGenerateAttributeBeforeTheType(): void
+    {
+        $seen = [];
+
+        $this->forAll()
+            ->auto()
+            ->runs(20)
+            ->seed(1)
+            ->check(static function (#[Generate(new IntArbitrary(5, 5))] int $n) use (&$seen): void {
+                $seen[] = $n;
+            });
+
+        self::assertSame([5], array_values(array_unique($seen)));
     }
 
     private function falsifiedOriginal(): mixed

@@ -1,7 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-10-02
 
+- **Added:** generators written on the closure's parameters with core's
+  `#[Generate]` (#61). Without `auto()`, the `forAll()` map and the
+  attributes together have to cover every parameter — the map may be empty;
+  under `auto()` the attributes sit between the map and the `@param` type.
+  Requires `rasuvaeff/property-testing-core` `^1.2`.
+- **Changed:** without `auto()`, a parameter neither the map nor `#[Generate]`
+  covers is refused naming the function and the parameter, instead of the
+  engine's `No generator for parameter "x"`.
 - **Docs:** the READMEs and `llms.txt` now state what follows from driving the
   engine through a single PHPUnit test method: `setUp()`/`tearDown()` and
   `#[Before]`/`#[After]` run once per property rather than per run, test-double
