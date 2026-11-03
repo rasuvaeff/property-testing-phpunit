@@ -13,10 +13,12 @@ use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
 use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\Gen;
+use Rasuvaeff\PropertyTesting\PhpUnit\PhpUnitTrialExecutor;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
+use Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener;
 
 /**
  * The adapter's fine print: exact report strings, exact env-validation
@@ -24,6 +26,8 @@ use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
  * mutation gate holds this package to.
  */
 #[CoversClass(PropertyCheck::class)]
+#[CoversClass(PhpUnitTrialExecutor::class)]
+#[CoversClass(VerboseListener::class)]
 #[CoversTrait(PropertyTesting::class)]
 final class AdapterDetailsTest extends TestCase
 {

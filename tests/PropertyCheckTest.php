@@ -23,11 +23,13 @@ use Rasuvaeff\PropertyTesting\ExampleViolationException;
 use Rasuvaeff\PropertyTesting\GaveUpException;
 use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\Generate;
+use Rasuvaeff\PropertyTesting\PhpUnit\PhpUnitTrialExecutor;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\FakeClock;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
+use Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
 use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
@@ -35,6 +37,8 @@ use Rasuvaeff\PropertyTesting\Target;
 use Rasuvaeff\PropertyTesting\TimeBudgetExceededException;
 
 #[CoversClass(PropertyCheck::class)]
+#[CoversClass(PhpUnitTrialExecutor::class)]
+#[CoversClass(VerboseListener::class)]
 #[CoversTrait(PropertyTesting::class)]
 final class PropertyCheckTest extends TestCase
 {
@@ -1026,6 +1030,76 @@ final class PropertyCheckTest extends TestCase
 
         rewind($stdout);
         self::assertSame("\n" . 'Property "testTabulatedCategoriesArePrintedWithTheirIntersections" table features: a 100% (4/4), b 100% (4/4); together: a & b 100% (4/4)' . "\n", (string) stream_get_contents($stdout));
+    }
+
+    public function testTableSharesAreRoundedToTheNearestPercent(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+        $invocation = 0;
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(3)
+            ->seed(3)
+            ->output($stdout, $stderr)
+            ->check(static function (int $value) use (&$invocation): void {
+                ++$invocation;
+
+                Classify::tabulate('features', $invocation === 1 ? ['one', 'rest'] : ['rest']);
+            });
+
+        rewind($stdout);
+        // 1/3 is 33.3 (ceil would say 34) and 2/3 is 66.7 (floor would say 66).
+        self::assertSame(
+            "\n" . 'Property "testTableSharesAreRoundedToTheNearestPercent" table features: rest 100% (3/3), one 33% (1/3); together: one & rest 33% (1/3)' . "\n",
+            (string) stream_get_contents($stdout),
+        );
+    }
+
+    public function testAPairSeenInTwoOfThreeRunsIsRoundedUp(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+        $invocation = 0;
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(3)
+            ->seed(3)
+            ->output($stdout, $stderr)
+            ->check(static function (int $value) use (&$invocation): void {
+                ++$invocation;
+
+                Classify::tabulate('features', $invocation === 1 ? ['solo'] : ['left', 'right']);
+            });
+
+        rewind($stdout);
+        self::assertSame(
+            "\n" . 'Property "testAPairSeenInTwoOfThreeRunsIsRoundedUp" table features: left 67% (2/3), right 67% (2/3), solo 33% (1/3); together: left & right 67% (2/3)' . "\n",
+            (string) stream_get_contents($stdout),
+        );
+    }
+
+    public function testATargetingBodyRunsNoSearchByDefault(): void
+    {
+        $stdout = fopen('php://memory', 'r+');
+        $stderr = fopen('php://memory', 'r+');
+        \assert(\is_resource($stdout) && \is_resource($stderr));
+        $calls = 0;
+
+        $this->forAll(['a' => Gen::intBetween(0, 1000)])
+            ->runs(5)
+            ->seed(3)
+            ->output($stdout, $stderr)
+            ->check(static function (int $a) use (&$calls): void {
+                ++$calls;
+                Target::maximize('a', $a);
+            });
+
+        rewind($stdout);
+        self::assertSame(5, $calls);
+        self::assertStringNotContainsString('search:', (string) stream_get_contents($stdout));
     }
 
     public function testTheSearchReportIsPrintedForATargetingBody(): void

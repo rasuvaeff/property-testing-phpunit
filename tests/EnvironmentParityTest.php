@@ -14,10 +14,12 @@ use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\Event\PropertyStarted;
 use Rasuvaeff\PropertyTesting\Event\RunStarted;
 use Rasuvaeff\PropertyTesting\Gen;
+use Rasuvaeff\PropertyTesting\PhpUnit\PhpUnitTrialExecutor;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyCheck;
 use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
+use Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener;
 use Rasuvaeff\PropertyTesting\PropertyViolationException;
 use Rasuvaeff\PropertyTesting\RegressionViolationException;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
@@ -32,6 +34,8 @@ use Rasuvaeff\PropertyTesting\Target;
  * and replays the regression corpus.
  */
 #[CoversClass(PropertyCheck::class)]
+#[CoversClass(PhpUnitTrialExecutor::class)]
+#[CoversClass(VerboseListener::class)]
 // Every test here enters through the trait's forAll(), and the id it derives
 // (or is handed) is part of what this suite pins — so the trait is covered in
 // fact, and saying so is what lets its mutants be judged by these tests.
