@@ -110,6 +110,8 @@ parity is golden rule 3.
 | `PROPERTY_DERANDOMIZE` | Always | Same words as `PROPERTY_VERBOSE` | Derives every unset seed from the property id — **overrides** `derandomize()` | n/a (off words disable) |
 | `PROPERTY_PATH` | Only when `path()` was not called (explicit path wins) | A recorded `CounterExample::$path` | Replays that shrink descent instead of searching for it; needs the seed of the run that produced it | `check()` rejects a path without a seed (`seed()` or `PROPERTY_SEED`) naming the property; the engine rejects every other path that would be a silent no-op |
 | `PROPERTY_EDGE_CASES` | Always (`false`/`''` = unset) | `mixin` or `none`, case-insensitive, trimmed | Numeric boundary bias for every run — **overrides** `edgeCases()` | `InvalidArgumentException` naming the accepted values |
+| `PROPERTY_EXHAUSTIVE` | Always | Same words as `PROPERTY_VERBOSE` | Exhaustive mode for every property whose domain fits its `exhaustiveBudget()` — **overrides** `exhaustive()` | n/a (off words disable) |
+| `PROPERTY_SEARCH_RUNS` | Always (`false`/`''` = unset) | A canonical non-negative integer (`0`, `250`; not `+5`, `07`) | Overrides every property's `searchRuns()`; `0` switches the targeted search off — **overrides** `searchRuns()` | `InvalidArgumentException` (`PROPERTY_SEARCH_RUNS must be a non-negative integer, got "…"`) |
 
 **Diagnostics print in a fixed order: the discard warning first, then the
 distribution.** Both adapters emit the same two lines for the same run, and a
