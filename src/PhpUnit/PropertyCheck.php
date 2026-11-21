@@ -13,23 +13,16 @@ use Rasuvaeff\PropertyTesting\PropertyListener;
 use Rasuvaeff\PropertyTesting\Runner\Clock;
 use Rasuvaeff\PropertyTesting\Runner\Corpus;
 use Rasuvaeff\PropertyTesting\Runner\CorpusFactory;
-use Rasuvaeff\PropertyTesting\Runner\CoverageFailed;
-use Rasuvaeff\PropertyTesting\Runner\DistributionReport;
+use Rasuvaeff\PropertyTesting\Runner\DiagnosticLevel;
+use Rasuvaeff\PropertyTesting\Runner\DiagnosticLines;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
-use Rasuvaeff\PropertyTesting\Runner\EnvironmentOverrides;
-use Rasuvaeff\PropertyTesting\Runner\GaveUp;
-use Rasuvaeff\PropertyTesting\Runner\LabelShare;
-use Rasuvaeff\PropertyTesting\Runner\Passed;
+use Rasuvaeff\PropertyTesting\Runner\Environment;
+use Rasuvaeff\PropertyTesting\Runner\FailOnTrialExecutor;
 use Rasuvaeff\PropertyTesting\Runner\Phase;
-use Rasuvaeff\PropertyTesting\Runner\PropertyConfig;
 use Rasuvaeff\PropertyTesting\Runner\PropertyDefinition;
 use Rasuvaeff\PropertyTesting\Runner\PropertyRunner;
 use Rasuvaeff\PropertyTesting\Runner\RunStatistics;
-use Rasuvaeff\PropertyTesting\Runner\SearchReport;
 use Rasuvaeff\PropertyTesting\Runner\ShrinkMode;
-use Rasuvaeff\PropertyTesting\Runner\TargetOutcome;
-use Rasuvaeff\PropertyTesting\Runner\TimeBudgetExceeded;
-use Rasuvaeff\PropertyTesting\ValueRenderer;
 
 /**
  * Fluent builder mapping the engine's structured PropertyResult onto PHPUnit:
@@ -49,12 +42,6 @@ use Rasuvaeff\PropertyTesting\ValueRenderer;
  */
 final class PropertyCheck
 {
-    /**
-     * Warn when more than this fraction of runs is discarded via
-     * {@see \Rasuvaeff\PropertyTesting\Assume::that()}.
-     */
-    private const float SKIP_RATE_WARNING_THRESHOLD = 0.9;
-
     private ?int $runs = null;
     private ?int $seed = null;
     private ?int $maxShrinks = null;
@@ -75,6 +62,7 @@ final class PropertyCheck
     private ?int $searchRuns = null;
     private ?bool $derandomize = null;
     private bool $auto = false;
+    private int $failOn = 0;
     private ?string $expectedExceptionClass = null;
 
     /**
@@ -395,6 +383,23 @@ final class PropertyCheck
     }
 
     /**
+     * PHP diagnostics of these levels (`E_WARNING`, `E_DEPRECATED`, … as a
+     * bitmask) raised while the body runs fail the run with an
+     * `\ErrorException` at the place they were raised — a counterexample that
+     * shrinks like any other, instead of a line PHPUnit collects for a green
+     * suite. 0 (the default) changes nothing. A diagnostic silenced with `@`
+     * stays silent; one this does not claim goes on to PHPUnit's own handler.
+     * The same knob as the Testo adapter's `#[Property(failOn: …)]`.
+     */
+    public function failOn(int $levels): self
+    {
+        $this->assertAtLeast('failOn', $levels, 0);
+        $this->failOn = $levels;
+
+        return $this;
+    }
+
+    /**
      * Derive a generator from the closure's signature for every parameter the
      * {@see PropertyTesting::forAll()} map does not cover — the `@param` psalm
      * type when the closure has a docblock (`int<1, 300>` beats a bare `int`),
@@ -483,8 +488,9 @@ final class PropertyCheck
             $reflection->getParameters(),
         );
 
-        $seed = $this->seed ?? EnvironmentOverrides::seed(getenv('PROPERTY_SEED'));
-        $path = $this->path ?? EnvironmentOverrides::string(getenv('PROPERTY_PATH'));
+        $environment = Environment::fromVariables($this->variables());
+        $seed = $this->seed ?? $environment->seed;
+        $path = $this->path ?? $environment->path;
 
         if ($path !== null && $seed === null) {
             // The engine refuses this too, but without the property's name —
@@ -501,35 +507,31 @@ final class PropertyCheck
             name: $this->name,
             generators: $this->resolveGenerators($reflection, $parameterNames),
             parameterNames: $parameterNames,
-            config: new PropertyConfig(
-                runs: EnvironmentOverrides::runs(getenv('PROPERTY_RUNS')) ?? $this->runs ?? 100,
-                seed: $seed,
+            // The environment dials the suite; the code pins the property
+            // (core's Environment::config() applies that table).
+            config: $environment->config(
+                runs: $this->runs ?? 100,
+                seed: $this->seed,
                 maxShrinks: $this->maxShrinks,
                 maxDiscards: $this->maxDiscards,
                 timeoutMs: $this->timeoutMs,
                 budgetMs: $this->budgetMs,
                 shrink: $this->shrink,
                 shrinkBudgetMs: $this->shrinkBudgetMs,
-                // The environment dials the suite; the code pins the property.
-                // A phase list is the CI gate knob, so the variable wins over
-                // the setter — while a path, like a seed, is a replay of one
-                // specific failure and yields to the one written down.
-                phases: EnvironmentOverrides::phases(getenv('PROPERTY_PHASES')) ?? $this->phases,
-                derandomize: EnvironmentOverrides::flag(getenv('PROPERTY_DERANDOMIZE')) ?? $this->derandomize ?? false,
-                path: $path,
-                edgeCases: EnvironmentOverrides::edgeCases(getenv('PROPERTY_EDGE_CASES')) ?? $this->edgeCases ?? EdgeCases::Mixin,
-                // Suite dials as well: enumerate everything small on a
-                // nightly, or give the search a bigger budget there.
-                exhaustive: EnvironmentOverrides::flag(getenv('PROPERTY_EXHAUSTIVE')) ?? $this->exhaustive ?? false,
+                phases: $this->phases,
+                derandomize: $this->derandomize ?? false,
+                path: $this->path,
+                edgeCases: $this->edgeCases ?? EdgeCases::Mixin,
+                exhaustive: $this->exhaustive ?? false,
                 exhaustiveBudget: $this->exhaustiveBudget,
                 flakyReplays: $this->flakyReplays,
-                searchRuns: EnvironmentOverrides::count('PROPERTY_SEARCH_RUNS', getenv('PROPERTY_SEARCH_RUNS')) ?? $this->searchRuns ?? 0,
+                searchRuns: $this->searchRuns ?? 0,
             ),
             examples: $this->examples,
             replayRegressions: $this->seed === null,
         );
 
-        $corpus = $this->resolveCorpus();
+        $corpus = $environment->db === null ? null : CorpusFactory::fromDsn($environment->db);
 
         if ($corpus instanceof Corpus) {
             // The id is what keys the corpus; without a corpus an unstable one
@@ -540,12 +542,12 @@ final class PropertyCheck
 
         $listeners = $this->listeners;
 
-        if (EnvironmentOverrides::flag(getenv('PROPERTY_VERBOSE')) ?? false) {
+        if ($environment->verbose) {
             $listeners[] = new VerboseListener($this->stdout);
         }
 
         $executor = new PhpUnitTrialExecutor($property, $this->expectedExceptionClass);
-        $result = (new PropertyRunner($this->clock))->run($definition, $executor, $listeners, $corpus);
+        $result = (new PropertyRunner($this->clock))->run($definition, new FailOnTrialExecutor($executor, $this->failOn), $listeners, $corpus);
 
         $skip = $executor->everyRunSkippedWith();
 
@@ -556,23 +558,15 @@ final class PropertyCheck
             throw $skip;
         }
 
-        $statistics = match (true) {
-            $result instanceof Passed => $result->statistics,
-            $result instanceof GaveUp => $result->statistics,
-            $result instanceof CoverageFailed => $result->statistics,
-            $result instanceof TimeBudgetExceeded => $result->statistics,
-            default => null,
-        };
+        $statistics = RunStatistics::of($result);
 
         if ($statistics instanceof RunStatistics) {
-            // Warning first, then the distribution — the order the Testo
-            // adapter prints them in. Both adapters share one log whenever a
-            // suite merges the two streams; see AGENTS.md.
-            $this->warnOnExcessiveSkips($statistics);
-            $this->reportClassifications($statistics);
-            $this->reportTables($statistics);
-            $this->reportExhaustive($statistics);
-            $this->reportSearch($statistics);
+            // Warnings on stderr, the rest on stdout, in the order core words
+            // them — the order the Testo adapter prints them in. Both adapters
+            // share one log whenever a suite merges the two streams.
+            foreach (DiagnosticLines::of($this->name, $statistics) as $line) {
+                $this->diagnose($line->level === DiagnosticLevel::Warning ? $this->stderr : $this->stdout, $line->text);
+            }
         }
 
         // The check is the assertion, whichever way it went: counted before
@@ -587,6 +581,23 @@ final class PropertyCheck
         }
 
         throw new AssertionFailedError($failure->getMessage(), 0, $failure);
+    }
+
+    /**
+     * The raw `PROPERTY_*` values core's {@see Environment} parses: read here,
+     * because the engine never reads the process environment.
+     *
+     * @return array<string, string|false>
+     */
+    private function variables(): array
+    {
+        $variables = [];
+
+        foreach (Environment::VARIABLES as $name) {
+            $variables[$name] = getenv($name);
+        }
+
+        return $variables;
     }
 
     /**
@@ -659,102 +670,6 @@ final class PropertyCheck
     }
 
     /**
-     * Print the share of (passing) runs that hit each
-     * {@see \Rasuvaeff\PropertyTesting\Classify} label.
-     */
-    private function reportClassifications(RunStatistics $statistics): void
-    {
-        $classifications = $statistics->classifications;
-        $checks = $statistics->checks;
-
-        if ($classifications === [] || $checks <= 0) {
-            return;
-        }
-
-        arsort($classifications);
-
-        $parts = [];
-        foreach ($classifications as $label => $count) {
-            $parts[] = sprintf(
-                '%s %d%% (%d/%d)',
-                $label,
-                (int) round($count * 100 / $checks),
-                $count,
-                $checks,
-            );
-        }
-
-        $this->diagnose($this->stdout, sprintf('Property "%s" distribution: %s', $this->name, implode(', ', $parts)));
-    }
-
-    /**
-     * One line per `Classify::tabulate()` table: the tag shares, then the
-     * pairs hit together when any were — the same wording the Testo adapter
-     * prints, on the distribution's stream.
-     */
-    private function reportTables(RunStatistics $statistics): void
-    {
-        if ($statistics->checks <= 0) {
-            return;
-        }
-
-        $report = DistributionReport::of($statistics, coverageAssessed: true);
-
-        foreach ($report->tables as $table => $shares) {
-            $render = static fn(LabelShare $share): string => sprintf('%s %d%% (%d/%d)', $share->label, (int) round($share->percent), $share->count, $report->checks);
-            $parts = array_map($render, $shares);
-            $pairs = array_map($render, $report->intersections[$table] ?? []);
-
-            $this->diagnose(
-                $this->stdout,
-                sprintf('Property "%s" table %s: %s', $this->name, $table, implode(', ', $parts))
-                    . ($pairs === [] ? '' : sprintf('; together: %s', implode(', ', $pairs))),
-            );
-        }
-    }
-
-    /**
-     * What exhaustive mode did, for a property that asked for it: the domain
-     * it walked (stdout, like the distribution), or why it sampled instead
-     * (stderr, like the discard warning).
-     */
-    private function reportExhaustive(RunStatistics $statistics): void
-    {
-        if ($statistics->domainSize !== null) {
-            $this->diagnose($this->stdout, sprintf('Property "%s" enumerated its whole domain of %d input(s)', $this->name, $statistics->domainSize));
-        } elseif ($statistics->exhaustiveDeclined !== null) {
-            $this->diagnose($this->stderr, sprintf('Property "%s" could not enumerate its domain and sampled instead: %s', $this->name, $statistics->exhaustiveDeclined));
-        }
-    }
-
-    /**
-     * The search report: how many bodies the search phase executed and where
-     * every `Target` label ended up.
-     */
-    private function reportSearch(RunStatistics $statistics): void
-    {
-        $search = $statistics->search;
-
-        if (!$search instanceof SearchReport) {
-            return;
-        }
-
-        $parts = array_map(
-            static fn(TargetOutcome $target): string => sprintf(
-                '%s %s %s (%d improvement(s)%s)',
-                $target->label,
-                $target->direction->value === 'maximize' ? 'max' : 'min',
-                $target->best === null ? '-' : ValueRenderer::render($target->best),
-                $target->improvements,
-                $target->recalled > 0 ? sprintf(', %d recalled', $target->recalled) : '',
-            ),
-            $search->targets,
-        );
-
-        $this->diagnose($this->stdout, sprintf('Property "%s" search: %d evaluation(s); %s', $this->name, $search->evaluations, implode(', ', $parts)));
-    }
-
-    /**
      * An id derived from a closure keys the corpus by something that moves —
      * the engine names the problem, this prints it. Same channel as the
      * excessive-discard warning, and impossible to hit once {@see id()} has
@@ -770,18 +685,6 @@ final class PropertyCheck
 
         self::$warnedIds[$this->id] = $this->id;
         $this->diagnose($this->stderr, $warning);
-    }
-
-    /**
-     * The corpus `PROPERTY_DB` names, or null when it is unset (storage off,
-     * nothing written). The value's meaning — a directory, a Redis DSN, an
-     * error — is the engine's, shared with the Testo adapter.
-     */
-    private function resolveCorpus(): ?Corpus
-    {
-        $dsn = EnvironmentOverrides::string(getenv('PROPERTY_DB'));
-
-        return $dsn === null ? null : CorpusFactory::fromDsn($dsn);
     }
 
     /**
@@ -801,24 +704,6 @@ final class PropertyCheck
             'Property id "%s" was derived from a helper, not the test method that ran, so every call site shares one corpus entry: call forAll() directly in the test method or pass an explicit property id with ->id()',
             $this->id,
         );
-    }
-
-    private function warnOnExcessiveSkips(RunStatistics $statistics): void
-    {
-        $skips = $statistics->discards;
-        $attempts = $statistics->attempts;
-
-        if ($attempts <= 0 || ($skips / $attempts) <= self::SKIP_RATE_WARNING_THRESHOLD) {
-            return;
-        }
-
-        $this->diagnose($this->stderr, sprintf(
-            'Property "%s" discarded %d of %d attempt(s) (%d%%); consider narrowing the generators',
-            $this->name,
-            $skips,
-            $attempts,
-            (int) round($skips * 100 / $attempts),
-        ));
     }
 
     /**

@@ -19,6 +19,7 @@ use Rasuvaeff\PropertyTesting\PhpUnit\PropertyTesting;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\Env;
 use Rasuvaeff\PropertyTesting\PhpUnit\Tests\Support\RecordingListener;
 use Rasuvaeff\PropertyTesting\PhpUnit\VerboseListener;
+use Rasuvaeff\PropertyTesting\PropertyViolationException;
 
 /**
  * The adapter's fine print: exact report strings, exact env-validation
@@ -269,6 +270,60 @@ final class AdapterDetailsTest extends TestCase
             "\n" . 'Property "testTheDiscardWarningPercentageIsRounded" discarded 29 of 30 attempt(s) (97%); consider narrowing the generators' . "\n",
             (string) stream_get_contents($stderr),
         );
+    }
+
+    public function testADiscardedExampleIsWarnedAbout(): void
+    {
+        [$stdout, $stderr] = $this->streams();
+
+        $this->forAll(['value' => Gen::intBetween(0, 10)])
+            ->runs(1)
+            ->seed(1)
+            ->examples([[-1], [3]])
+            ->output($stdout, $stderr)
+            ->check(static function (int $value): void {
+                Assume::that($value >= 0);
+            });
+
+        rewind($stderr);
+
+        self::assertSame(
+            "\n" . 'Property "testADiscardedExampleIsWarnedAbout" discarded 1 explicit example(s) with Assume::that(); a discarded example checks nothing' . "\n",
+            (string) stream_get_contents($stderr),
+        );
+    }
+
+    public function testFailOnTurnsADiagnosticIntoAShrunkFailure(): void
+    {
+        try {
+            $this->forAll(['value' => Gen::intBetween(0, 100)])
+                ->runs(20)
+                ->seed(1)
+                ->failOn(E_USER_WARNING)
+                ->check(static function (int $value): void {
+                    if ($value >= 5) {
+                        trigger_error('value ' . $value . ' is too large', E_USER_WARNING);
+                    }
+                });
+
+            self::fail('expected the diagnostic to fail the property');
+        } catch (AssertionFailedError $failure) {
+            $violation = $failure->getPrevious();
+            self::assertInstanceOf(PropertyViolationException::class, $violation);
+            self::assertSame(['value' => 5], $violation->getCounterExample()->shrunkArguments);
+            $diagnostic = $violation->getCounterExample()->failure;
+            self::assertInstanceOf(\ErrorException::class, $diagnostic);
+            self::assertSame('value 5 is too large', $diagnostic->getMessage());
+            self::assertSame(E_USER_WARNING, $diagnostic->getSeverity());
+        }
+    }
+
+    public function testFailOnRefusesANegativeMask(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Property "testFailOnRefusesANegativeMask": failOn must be greater than or equal to 0');
+
+        $this->forAll(['value' => Gen::int()])->failOn(-1);
     }
 
     public function testTheDiscardWarningLineIsExact(): void

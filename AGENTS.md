@@ -113,11 +113,18 @@ parity is golden rule 3.
 | `PROPERTY_EXHAUSTIVE` | Always | Same words as `PROPERTY_VERBOSE` | Exhaustive mode for every property whose domain fits its `exhaustiveBudget()` — **overrides** `exhaustive()` | n/a (off words disable) |
 | `PROPERTY_SEARCH_RUNS` | Always (`false`/`''` = unset) | A canonical non-negative integer (`0`, `250`; not `+5`, `07`) | Overrides every property's `searchRuns()`; `0` switches the targeted search off — **overrides** `searchRuns()` | `InvalidArgumentException` (`PROPERTY_SEARCH_RUNS must be a non-negative integer, got "…"`) |
 
-**Diagnostics print in a fixed order: the discard warning first, then the
-distribution.** Both adapters emit the same two lines for the same run, and a
-log that merges the two streams must not show them in different orders. The
-order is pinned here and in the Testo adapter's `AGENTS.md`; changing it means
-changing both.
+**Diagnostics print in a fixed order: the discard warning, the
+discarded-examples warning, the distribution, the tables, the exhaustive line,
+the search report.** Both adapters emit the same lines for the same run, and a
+log that merges the two streams must not show them in different orders. Since
+core 1.5 the wording and the order live in the engine
+(`Runner\DiagnosticLines`, `Runner\TraceListener`); this adapter only sends a
+`DiagnosticLevel::Warning` line to stderr and the rest to stdout, each wrapped
+in its own newlines. Do not re-implement a line here — change it in core, where
+both adapters pick it up. The variable table above is resolved by core's
+`Runner\Environment` (`fromVariables()` + `config()`); the adapter reads
+`getenv()` and keeps only its own path-without-seed message. `failOn()` wraps
+the executor in core's `FailOnTrialExecutor`.
 
 **Three framework asymmetries the parity rule does not cover.**
 

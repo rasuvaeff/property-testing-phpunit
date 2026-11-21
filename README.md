@@ -116,12 +116,13 @@ Reproduce the exact run by pinning the reported seed: `->seed(7382910)`.
 | `exhaustive(bool = true)` | Walk the whole parameter domain instead of sampling it when every generator is `Enumerable` and the product fits the budget; otherwise the phase samples and a warning says why. `runs()` is ignored when it walks — see the [core README](https://github.com/rasuvaeff/property-testing-core#exhaustive-mode) |
 | `exhaustiveBudget(int)` | The largest domain `exhaustive()` walks (default 10 000) |
 | `flakyReplays(int)` | Re-executions of the minimised counterexample (default 2); one that passes marks it flaky, with a `Flaky:` line in the failure. `0` disables — see [flaky detection](https://github.com/rasuvaeff/property-testing-core#flaky-detection) |
+| `failOn(int)` | PHP diagnostics of these levels (`E_WARNING \| E_DEPRECATED`, …) raised by the body fail the run with an `\ErrorException` at the place they were raised, and the input shrinks like any other counterexample. `0` (default) changes nothing; a level not claimed goes on to PHPUnit's own handler, and a diagnostic silenced with `@` stays silent — the Testo adapter's `#[Property(failOn: …)]` |
 | `searchRuns(int)` | Bodies the targeted search may execute after the random phase, for a body that calls `Target::maximize()`/`minimize()` (default 0 — no search) — see [targeted search](https://github.com/rasuvaeff/property-testing-core#targeted-search-target) |
 
 Every setter validates its argument at the call, with the property's name in
 the message: `runs(0)` throws
 `Property "testSortIsIdempotent": runs must be greater than or equal to 1`
-(the same for `maxShrinks`/`maxDiscards`/`flakyReplays`/`searchRuns` below
+(the same for `maxShrinks`/`maxDiscards`/`flakyReplays`/`searchRuns`/`failOn` below
 `0` and for `timeoutMs`/`budgetMs`/`shrinkBudgetMs`/`exhaustiveBudget` below
 `1`). A `path()` without a
 `seed()` — in either order — or a `PROPERTY_PATH` without a seed is refused by
@@ -387,7 +388,8 @@ Property "testSortKeepsEveryElement" distribution: long 39% (77/200), short 61% 
 ```
 
 A property that discards more than 90% of its attempts (via `Assume::that()`)
-gets a warning suggesting narrower generators.
+gets a warning suggesting narrower generators. An explicit example the body
+discarded still passes, but gets a warning on stderr too: it checked nothing.
 
 Beside the distribution line, the adapter prints what else the engine
 measured: each `Classify::tabulate()` table with its tag shares and the pairs
@@ -406,7 +408,10 @@ of its own (`\n` + line + `\n`) rather than being glued to the end of
 `....F..`. The Testo adapter, which has no progress row, prints the same lines
 without the leading newline. The streams and the exact format are diagnostics
 for a human reading the terminal, not a contract: grep for the
-`Property "<name>"` prefix, not for a byte offset.
+`Property "<name>"` prefix, not for a byte offset. The lines and their order are
+the engine's (`DiagnosticLines`, `TraceListener`), shared with the Testo
+adapter: a warning goes to stderr, everything else to stdout. A share is rounded
+half up on the exact ratio (`23/40` reads 58%).
 
 ### Why no `#[Property]` attribute?
 
@@ -435,8 +440,10 @@ Everything there is usable from a `check()` closure as-is.
 
 `VerboseListener`, `PhpUnitTrialExecutor`, the `PropertyCheck` constructor and
 its `output()` seam are `@internal`. The environment variables and the
-`PROPERTY_DB` DSN are parsed by the engine (`EnvironmentOverrides`,
-`CorpusFactory`), so they mean the same thing under the Testo adapter.
+`PROPERTY_DB` DSN are parsed by the engine (`Environment`, `CorpusFactory`),
+which also applies the precedence between a variable and a setter, so they mean
+the same thing under the Testo adapter. `failOn()` is the engine's
+`FailOnTrialExecutor`.
 
 ## Security
 
