@@ -116,12 +116,13 @@ Property falsified after 12 successful run(s); seed=7382910
 | `exhaustive(bool = true)` | Обойти весь домен параметров вместо выборки, когда каждый генератор — `Enumerable`, а произведение умещается в бюджет; иначе фаза делает выборку, а предупреждение говорит почему. `runs()` при обходе игнорируется — см. [README core](https://github.com/rasuvaeff/property-testing-core#exhaustive-mode) |
 | `exhaustiveBudget(int)` | Наибольший домен, который обходит `exhaustive()` (по умолчанию 10 000) |
 | `flakyReplays(int)` | Повторные исполнения минимизированного контрпримера (по умолчанию 2); прошедший помечает его flaky, со строкой `Flaky:` в сообщении. `0` выключает — см. [детекцию flaky](https://github.com/rasuvaeff/property-testing-core#flaky-detection) |
+| `failOn(int)` | PHP-диагностики этих уровней (`E_WARNING \| E_DEPRECATED`, …), поднятые телом, валят прогон с `\ErrorException` в месте, где подняты, и вход сжимается, как любой другой контрпример. `0` (по умолчанию) ничего не меняет; незабранный уровень уходит собственному обработчику PHPUnit, диагностика, заглушённая `@`, остаётся заглушённой — это `#[Property(failOn: …)]` Testo-адаптера |
 | `searchRuns(int)` | Сколько тел может исполнить целевой поиск после random-фазы, если тело вызывает `Target::maximize()`/`minimize()` (по умолчанию 0 — без поиска) — см. [целевой поиск](https://github.com/rasuvaeff/property-testing-core#targeted-search-target) |
 
 Каждый сеттер проверяет аргумент в момент вызова, с именем property в
 сообщении: `runs(0)` бросает
 `Property "testSortIsIdempotent": runs must be greater than or equal to 1`
-(так же `maxShrinks`/`maxDiscards`/`flakyReplays`/`searchRuns` ниже `0` и
+(так же `maxShrinks`/`maxDiscards`/`flakyReplays`/`searchRuns`/`failOn` ниже `0` и
 `timeoutMs`/`budgetMs`/`shrinkBudgetMs`/`exhaustiveBudget` ниже `1`). `path()` без `seed()` — в любом порядке — или
 `PROPERTY_PATH` без seed так же отвергает `check()`. Карту `forAll()`
 `check()` тоже проверяет до запуска движка: значение, не являющееся
@@ -385,7 +386,9 @@ Property "testSortKeepsEveryElement" distribution: long 39% (77/200), short 61% 
 ```
 
 Property, отбрасывающая больше 90% попыток (через `Assume::that()`), получает
-предупреждение с советом сузить генераторы.
+предупреждение с советом сузить генераторы. Явный пример, отброшенный телом,
+всё равно проходит, но тоже получает предупреждение в stderr: он ничего не
+проверил.
 
 Рядом со строкой распределения адаптер печатает остальное, что измерил
 движок: каждую таблицу `Classify::tabulate()` с долями тегов и парами,
@@ -404,7 +407,10 @@ stdout) или почему сделал выборку (stderr), и отчёт 
 хвосту `....F..`. Testo-адаптер, у которого строки прогресса нет, печатает те
 же строки без ведущего перевода. Потоки и точный формат — диагностика для
 человека у терминала, не контракт: grep'ать стоит по префиксу
-`Property "<name>"`, а не по смещению в байтах.
+`Property "<name>"`, а не по смещению в байтах. Строки и их порядок — движка
+(`DiagnosticLines`, `TraceListener`) и общие с Testo-адаптером: предупреждение
+идёт в stderr, всё остальное — в stdout. Доля округляется половиной вверх по
+точному отношению (`23/40` даёт 58%).
 
 ### Почему нет атрибута `#[Property]`?
 
@@ -433,8 +439,9 @@ stdout) или почему сделал выборку (stderr), и отчёт 
 
 `VerboseListener`, `PhpUnitTrialExecutor`, конструктор `PropertyCheck` и его
 seam `output()` — `@internal`. Переменные окружения и DSN `PROPERTY_DB`
-разбирает движок (`EnvironmentOverrides`, `CorpusFactory`), поэтому под
-Testo-адаптером они значат то же самое.
+разбирает движок (`Environment`, `CorpusFactory`), он же применяет приоритет
+между переменной и сеттером, поэтому под Testo-адаптером они значат то же
+самое. `failOn()` — это `FailOnTrialExecutor` движка.
 
 ## Безопасность
 

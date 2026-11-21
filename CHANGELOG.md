@@ -1,7 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-11-21
 
+- **Added:** `PropertyCheck::failOn(int $levels)` — PHP diagnostics of these
+  levels raised by the body fail the run with an `\ErrorException` and shrink,
+  the Testo adapter's `#[Property(failOn: …)]` (#71).
+- **Added:** a warning on stderr when the body discarded an explicit example
+  with `Assume::that()` — the example passes but checked nothing
+  (rasuvaeff/property-testing-core#188).
+- **Changed:** the diagnostics, the `PROPERTY_VERBOSE` trace and the
+  `PROPERTY_*` resolution come from `rasuvaeff/property-testing-core` 1.5
+  (`DiagnosticLines`, `TraceListener`, `Environment`, `RunStatistics::of()`)
+  instead of a copy kept in step with the Testo adapter by hand (#70). Texts,
+  streams and order are unchanged.
+- deps: `rasuvaeff/property-testing-core` `^1.2` → `^1.5`.
 - **Docs:** the `AGENTS.md` environment contract lists `PROPERTY_EXHAUSTIVE` and `PROPERTY_SEARCH_RUNS`, which the adapter already reads (#72).
 - **Changed:** `composer mutation` now runs Infection with `--with-uncovered`, and the infection config gains the shared template entries (ignore of parameter defaults in signatures, `PublicVisibility`/`ProtectedVisibility` off). The tests now name `PhpUnitTrialExecutor` and `VerboseListener` in `#[CoversClass]`, and new tests pin the verbose trace lines, the executor's positional arguments and first-skip report, the table percentage rounding and the default of no search phase. Overall MSI 96.9% (250 of 258 mutants; eight documented equivalents) against `minMsi` 95. No `src/` changes.
 
