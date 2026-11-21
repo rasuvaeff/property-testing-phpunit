@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — 2026-11-21
+
+- **Changed:** PHP 8.6 is supported: the `php` constraint is widened to
+  `8.3 - 8.6` (#75). CI runs PHP 8.6 as a regular matrix entry; the
+  backward-compatibility job runs on PHP 8.5.
+
 ## 1.2.0 — 2026-11-21
 
 - **Added:** `PropertyCheck::failOn(int $levels)` — PHP diagnostics of these
