@@ -12,7 +12,6 @@ use Rasuvaeff\PropertyTesting\PropertyId;
 use Rasuvaeff\PropertyTesting\PropertyListener;
 use Rasuvaeff\PropertyTesting\Runner\Clock;
 use Rasuvaeff\PropertyTesting\Runner\Corpus;
-use Rasuvaeff\PropertyTesting\Runner\CorpusFactory;
 use Rasuvaeff\PropertyTesting\Runner\DiagnosticLevel;
 use Rasuvaeff\PropertyTesting\Runner\DiagnosticLines;
 use Rasuvaeff\PropertyTesting\Runner\EdgeCases;
@@ -531,7 +530,7 @@ final class PropertyCheck
             replayRegressions: $this->seed === null,
         );
 
-        $corpus = $environment->db === null ? null : CorpusFactory::fromDsn($environment->db);
+        $corpus = EnvironmentCorpus::of($environment);
 
         if ($corpus instanceof Corpus) {
             // The id is what keys the corpus; without a corpus an unstable one

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed:** `PROPERTY_DB_PASSWORD` is read and passed to core's
+  `CorpusFactory::fromDsn()` as the Redis `AUTH` password, as core's
+  documentation promised since 0.10.0. Before, the variable was ignored, so a
+  shared Redis corpus behind `requirepass` could not be used: credentials in
+  the DSN are rejected and every command failed with `NOAUTH`. Unset or empty
+  means no `AUTH`; the password is never echoed. Fixes #79.
+
 ## 1.2.2 — 2026-11-27
 
 - Requires `phpunit/phpunit` `^11.5.50 || ^12.5.8 || ^13.0`: versions with security advisories are no longer allowed.
