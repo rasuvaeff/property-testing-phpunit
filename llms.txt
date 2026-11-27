@@ -157,6 +157,7 @@ final class SortPropertyTest extends TestCase
 | `PROPERTY_SEED` | integer within range | Seeds properties without an explicit `seed()`; `seed()` wins; invalid value throws |
 | `PROPERTY_VERBOSE` | `''` = unset; `0`/`false`/`off`/`no` (case-insensitive, trimmed) = off; anything else = on | Trace: each run's arguments/draws, each accepted shrink step |
 | `PROPERTY_DB` | directory path OR `redis://host[:port][/db][?prefix=key-prefix]` (`rediss://` = TLS; parsed by core `CorpusFactory`) | Regression corpus: record on falsification, replay first on the next run, prune on green. A DSN builds a RedisCorpus (ext-redis preferred, else predis; neither installed THROWS) — same document as the directory form, shared between CI and developers |
+| `PROPERTY_DB_PASSWORD` | string; unset or `''` = no AUTH | Redis `AUTH` password for a `redis://`/`rediss://` `PROPERTY_DB`, passed as `CorpusFactory::fromDsn($dsn, password: …)`. Never put it in the DSN (userinfo is rejected); never echoed in diagnostics; ignored for a directory |
 | `PROPERTY_PHASES` | `examples,corpus,random,shrink` (comma-separated, case-insensitive) | Stages to run; OVERRIDES `phases()`; unknown name throws |
 | `PROPERTY_DERANDOMIZE` | same switch words as `PROPERTY_VERBOSE` | Unset seeds derived from the property id; `seed()`/`PROPERTY_SEED` still win |
 | `PROPERTY_PATH` | recorded `CounterExample::$path` | Replays that shrink descent; needs the seed of that run; explicit `path()` wins |
