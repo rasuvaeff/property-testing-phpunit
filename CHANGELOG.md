@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2 — 2026-11-27
 
 - Requires `phpunit/phpunit` `^11.5.50 || ^12.5.8 || ^13.0`: versions with security advisories are no longer allowed.
 
