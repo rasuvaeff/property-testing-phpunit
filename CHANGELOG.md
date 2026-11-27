@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Requires `phpunit/phpunit` `^11.5.50 || ^12.5.8 || ^13.0`: versions with security advisories are no longer allowed.
+
 ## 1.2.1 — 2026-11-21
 
 - **Changed:** PHP 8.6 is supported: the `php` constraint is widened to
